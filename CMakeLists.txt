@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Strategizer2D LANGUAGES CXX)
+project(Strategizer2D VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -41,6 +41,7 @@ add_executable(Strategizer2D
   src/App.cpp
   src/Screens.cpp
   src/BattleScreen.cpp)
+target_compile_definitions(Strategizer2D PRIVATE STRATEGIZER_VERSION="${PROJECT_VERSION}")
 target_link_libraries(Strategizer2D PRIVATE strategizer_core
   sfml-graphics sfml-window sfml-system)
 if(NOT MSVC)

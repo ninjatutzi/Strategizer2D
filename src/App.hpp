@@ -80,6 +80,7 @@ public:
     std::string root;
 
 private:
+    void drawVersion();
     void applyLetterbox();
     void loadProgress();
     void runDemo(const std::string& dir);

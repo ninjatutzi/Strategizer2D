@@ -18,6 +18,15 @@ ctest --test-dir build       # Logik-Tests (ohne Grafik)
 
 Das Spiel findet `data/` und `assets/` automatisch (aktueller Ordner, Ordner der .exe, Projektordner).
 
+### Windows
+
+1. Einmalig installieren: [CMake](https://cmake.org/download) (Haken „Add to PATH“), [Git](https://git-scm.com)
+   und einen C++-Compiler (Visual Studio Build Tools oder MinGW-w64).
+2. `build.bat` doppelklicken – lädt SFML automatisch und baut das Spiel (nur beim ersten Mal / nach Code-Änderungen nötig).
+3. `play.bat` doppelklicken – startet das Spiel (baut vorher automatisch, falls noch nicht geschehen).
+
+Die Version (oben links, halbtransparent) steht in `CMakeLists.txt` bei `project(... VERSION x.y.z)`.
+
 ## Bedienung
 
 | Aktion | Eingabe |
