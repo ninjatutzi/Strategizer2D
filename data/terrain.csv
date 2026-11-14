@@ -4,7 +4,13 @@
 # move_cost_*       : movement points needed to ENTER the tile (0 = impassable)
 # damage_multiplier : applied to damage the unit standing on the tile RECEIVES
 #                     < 1 = defense buff, 1 = normal, > 1 = defense debuff
+
+
 id,name,symbol,r,g,b,move_cost_infantry,move_cost_vehicle,damage_multiplier
+
+snow,Snow,S,10,5,25,1,1,1.0
+concrete,Concrete,C,120,120,120,1,1,1.1
+
 plains,Plains,P,138,181,96,1,1,1.0
 forest,Forest,F,52,110,58,2,2,0.75
 hills,Hills,H,176,150,92,2,2,0.8
