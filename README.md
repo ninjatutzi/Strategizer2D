@@ -35,21 +35,30 @@ Die Version (oben links, halbtransparent) steht in `CMakeLists.txt` bei `project
 | Aufgestellte Truppe entfernen (Budget kommt zurück) | Rechtsklick |
 | Schlacht beginnen / Zug beenden | Leertaste oder Button |
 | Truppe wählen | Linksklick (Tab = nächste Truppe) |
-| Bewegen | Klick auf ein **blaues** Feld |
-| Angreifen | Waffe wählen (Klick oder Tasten 1–5), dann Klick auf ein **rot** markiertes Ziel |
+| Bewegen | Truppe wählen, Klick auf ein **blaues** Feld |
+| Waffe wählen (zeigt ihre Reichweite) | Klick auf die Waffe oder Taste 1–5 (nochmal drücken = abwählen) |
+| Waffe abwählen | Q (oder Esc) |
+| Angreifen | Waffe wählen, dann Klick auf ein **rot** markiertes Ziel |
 | Auswahl aufheben | Esc / Rechtsklick |
 
-Orange Felder = Reichweite der gewählten Waffe. Beim Überfahren eines Ziels siehst du den Schaden vorab.
+Standardmäßig ist keine Waffe gewählt: du siehst nur die Bewegungsreichweite (blau). Wählst du eine Waffe, wird stattdessen
+ihre Reichweite angezeigt (orange). Beim Überfahren eines Ziels siehst du den Schaden vorab.
 
 ## Regeln
 
-* Jede Truppe darf pro Runde **einmal bewegen ODER angreifen** (`double_attack` = zweimal angreifen).
+* Jede Truppe darf pro Runde **einmal bewegen UND einmal angreifen** (in beliebiger Reihenfolge;
+  `double_attack` = zweimal angreifen).
+* **Nebel des Krieges:** Du siehst nur Felder/Gegner innerhalb der **Sicht** (`vision`, Manhattan-Distanz) deiner
+  Truppen. Infanterie sieht standardmäßig weiter als Fahrzeuge. Gegner im Nebel kannst du nicht angreifen – die KI
+  unterliegt demselben Nebel.
+* **Hinterhalte:** Einige Gegnergruppen sind zu Beginn nicht auf der Karte. Sobald eine eigene Truppe nach einer
+  Bewegung auf einem Auslöser-Feld der Gruppe steht, erscheint die ganze Gruppe (ein Feld reicht).
 * **Willenskraft:** Treffer senken sie (`will_damage`). Bei 0 kann sich die Truppe in ihrem nächsten Zug
   nicht bewegen. Nach diesem Zug ist sie wieder auf dem Standardwert.
 * **Waffen-Abklingzeit** (`cooldown`): so viele eigene Züge ist die Waffe nach dem Schuss gesperrt.
 * **Gebäude** (★ = Missionsziel) können nur **Infanterie** einnehmen: auf das Feld ziehen genügt.
 * **Biome** verändern Bewegungskosten und erhaltenen Schaden (Plains = Standard).
-* **Tarnung** (`camouflage`): Truppe ist nur sichtbar, wenn eine gegnerische Truppe höchstens 2 Felder entfernt ist.
+* **Tarnung** (`camouflage`): Truppe ist nur sichtbar, wenn eine gegnerische Truppe höchstens 2 Felder entfernt ist (und in deren Sicht).
 * **Funk** (`radio`): Waffen mit `needs_radio=1` (z. B. spätere Artillerie) funktionieren nur, solange eine
   eigene Truppe mit Funkgerät lebt.
 * Sieg: Ziel der Mission erfüllt oder alle Gegner vernichtet. Niederlage: alle eigenen Truppen verloren oder
@@ -71,7 +80,7 @@ Zeilen mit `#` sind Kommentare). Fehler (Tippfehler, unbekannte IDs) werden beim
 
 | Datei | Inhalt |
 |---|---|
-| `units.csv` | Truppen: HP, Willenskraft, Rüstung, Schrittweite, Kosten, Attribute, bis zu 5 Waffen (`weapon1`–`weapon5`) |
+| `units.csv` | Truppen: HP, Willenskraft, Rüstung, Bewegung, Sicht, Kosten, Attribute, bis zu 5 Waffen (`weapon1`–`weapon5`) |
 | `weapons.csv` | Waffen: Reichweite, Schaden, AP, Willens-Schaden, Cooldown, `needs_radio` |
 | `terrain.csv` | Biome: Farbe, Bewegungskosten (Infanterie/Fahrzeug, 0 = unpassierbar), Schadensmultiplikator |
 | `campaigns.csv` | Kampagnen |
@@ -87,7 +96,9 @@ Eine **neue Mission** = Zeile in `missions.csv` + neue `.map`-Datei.
 [tiles]        12 Zeilen à 12 Zeichen: P Plains, F Forest, H Hills, M Mountain, R River (Symbole aus terrain.csv)
 [deploy]       Aufstellungszone als Rechteck: x0,y0,x1,y1  (mehrere Zeilen möglich)
 [buildings]    Name,x,y,Besitzer(enemy|player|neutral),Ziel(1|0)
-[enemies]      unit_id,x,y,Verhalten(aggressive|hold)   hold = bewegt sich nie, schießt nur
+[triggers]     Gruppe,x0,y0,x1,y1   Auslöser-Rechteck (mehrere Zeilen pro Gruppe möglich)
+[enemies]      unit_id,x,y,Verhalten(aggressive|hold)[,Gruppe]   hold = bewegt sich nie, schießt nur;
+               mit Gruppe: erscheint erst, wenn die Gruppe ausgelöst wird
 ```
 Koordinaten: x = Spalte, y = Zeile, jeweils ab 0 (oben links).
 

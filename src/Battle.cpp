@@ -72,6 +72,16 @@ void Battle::loadMap(const std::string& path) {
             b.objective = p.size() < 5 || trim(p[4]) != "0";
             if (!inBounds(b.x, b.y)) fail(lineNo, "building outside the map");
             buildings_.push_back(b);
+        } else if (section == "[triggers]") {
+            auto p = split(line, ',');
+            if (p.size() != 5) fail(lineNo, "trigger line must be group,x0,y0,x1,y1");
+            Trigger t;
+            t.group = toLower(trim(p[0]));
+            t.x0 = std::atoi(trim(p[1]).c_str()); t.y0 = std::atoi(trim(p[2]).c_str());
+            t.x1 = std::atoi(trim(p[3]).c_str()); t.y1 = std::atoi(trim(p[4]).c_str());
+            if (!inBounds(t.x0, t.y0) || !inBounds(t.x1, t.y1) || t.x0 > t.x1 || t.y0 > t.y1)
+                fail(lineNo, "trigger rectangle invalid or outside the map");
+            triggers_.push_back(t);
         } else if (section == "[enemies]") {
             auto p = split(line, ',');
             if (p.size() < 3) fail(lineNo, "enemy line must be unit_id,x,y[,aggressive|hold]");
@@ -86,10 +96,14 @@ void Battle::loadMap(const std::string& path) {
             u.hp = def->hp;
             u.will = def->will;
             u.holdPosition = p.size() > 3 && toLower(trim(p[3])) == "hold";
+            if (p.size() > 4 && !trim(p[4]).empty()) {
+                u.group = toLower(trim(p[4]));
+                u.active = false;   // dormant until the group is triggered
+            }
             if (!inBounds(u.x, u.y)) fail(lineNo, "enemy outside the map");
             units_.push_back(u);
         } else {
-            fail(lineNo, "line outside of a known section ([tiles] [deploy] [buildings] [enemies])");
+            fail(lineNo, "line outside of a known section ([tiles] [deploy] [buildings] [triggers] [enemies])");
         }
     }
     nextId_ = nextUnitId;
@@ -109,6 +123,9 @@ void Battle::loadMap(const std::string& path) {
     // validation
     if (deployZone_.empty()) throw std::runtime_error(path + ": [deploy] zone is empty");
     for (auto& u : units_) {
+        if (!u.group.empty() &&
+            std::none_of(triggers_.begin(), triggers_.end(), [&](const Trigger& t) { return t.group == u.group; }))
+            throw std::runtime_error(path + ": enemy group '" + u.group + "' has no [triggers] entry");
         if (terrainAt(u.x, u.y).moveCost(u.def->cls) == 0)
             throw std::runtime_error(path + ": enemy '" + u.def->id + "' placed on impassable terrain");
         for (auto& o : units_)
@@ -129,11 +146,11 @@ const Building* Battle::buildingAt(int x, int y) const {
 }
 
 Unit* Battle::unitAt(int x, int y) {
-    for (auto& u : units_) if (u.alive && u.x == x && u.y == y) return &u;
+    for (auto& u : units_) if (u.present() && u.x == x && u.y == y) return &u;
     return nullptr;
 }
 const Unit* Battle::unitAt(int x, int y) const {
-    for (auto& u : units_) if (u.alive && u.x == x && u.y == y) return &u;
+    for (auto& u : units_) if (u.present() && u.x == x && u.y == y) return &u;
     return nullptr;
 }
 Unit* Battle::unitById(int id) {
@@ -153,16 +170,27 @@ int Battle::aliveCount(Side s) const {
 int Battle::manhattan(int ax, int ay, int bx, int by) const { return std::abs(ax - bx) + std::abs(ay - by); }
 
 bool Battle::visibleTo(const Unit& target, Side viewer) const {
-    if (target.side == viewer || !target.def->has("camouflage")) return true;
+    if (!target.present()) return false;
+    if (target.side == viewer) return true;
+    const bool camo = target.def->has("camouflage");
+    for (auto& u : units_) {
+        if (!u.present() || u.side != viewer) continue;
+        int limit = u.def->vision;
+        if (camo) limit = std::min(limit, cfg::CamoRevealRange);
+        if (manhattan(u.x, u.y, target.x, target.y) <= limit) return true;
+    }
+    return false;
+}
+
+bool Battle::tileVisible(int x, int y, Side viewer) const {
     for (auto& u : units_)
-        if (u.alive && u.side == viewer && manhattan(u.x, u.y, target.x, target.y) <= cfg::CamoRevealRange)
-            return true;
+        if (u.present() && u.side == viewer && manhattan(u.x, u.y, x, y) <= u.def->vision) return true;
     return false;
 }
 
 bool Battle::hasRadio(Side s) const {
     return std::any_of(units_.begin(), units_.end(),
-                       [&](const Unit& u) { return u.alive && u.side == s && u.def->has("radio"); });
+                       [&](const Unit& u) { return u.present() && u.side == s && u.def->has("radio"); });
 }
 
 std::vector<BattleEvent> Battle::takeEvents() {
@@ -236,8 +264,8 @@ bool Battle::startBattle() {
 void Battle::beginPhase(Side s) {
     for (auto& u : units_) {
         if (!u.alive || u.side != s) continue;
-        u.actionsLeft = u.maxActions();
-        u.moved = u.attacked = false;
+        u.attacksLeft = u.def->maxAttacks();
+        u.moved = false;
         for (auto& c : u.cooldown) if (c > 0) --c;
     }
 }
@@ -249,7 +277,7 @@ void Battle::endPhase(Side s) {
     for (auto& u : units_) {
         if (!u.alive || u.side != s) continue;
         u.will = u.def->will;
-        u.actionsLeft = 0;
+        u.attacksLeft = 0;
     }
 }
 
@@ -276,7 +304,7 @@ void Battle::endPlayerTurn() {
     phase_ = Phase::EnemyTurn;
     beginPhase(Side::Enemy);
     aiQueue_.clear();
-    for (auto& u : units_) if (u.alive && u.side == Side::Enemy) aiQueue_.push_back(u.id);
+    for (auto& u : units_) if (u.present() && u.side == Side::Enemy) aiQueue_.push_back(u.id);
     message("Gegnerzug", Side::Enemy);
 }
 
@@ -284,7 +312,7 @@ void Battle::endPlayerTurn() {
 // Movement
 // ---------------------------------------------------------------------------------
 bool Battle::canMove(const Unit& u) const {
-    return u.alive && u.actionsLeft > 0 && !u.moved && !u.attacked && u.will > 0 &&
+    return u.present() && !u.moved && u.will > 0 &&
            ((u.side == Side::Player && phase_ == Phase::PlayerTurn) ||
             (u.side == Side::Enemy && phase_ == Phase::EnemyTurn));
 }
@@ -342,9 +370,9 @@ bool Battle::moveUnit(Unit& u, int x, int y) {
     u.x = x;
     u.y = y;
     u.moved = true;
-    u.actionsLeft = 0;
     emit(e);
     tryCapture(u);
+    if (u.side == Side::Player) checkTriggers(u);
     checkEnd();
     return true;
 }
@@ -366,6 +394,46 @@ void Battle::tryCapture(Unit& u) {
 }
 
 // ---------------------------------------------------------------------------------
+// Trigger groups: dormant enemies appear when a player unit stands on one of the
+// group's trigger tiles (touching any tile of a group triggers the whole group)
+// ---------------------------------------------------------------------------------
+void Battle::checkTriggers(const Unit& mover) {
+    for (auto& t : triggers_) {
+        if (mover.x < t.x0 || mover.x > t.x1 || mover.y < t.y0 || mover.y > t.y1) continue;
+        if (std::find(firedGroups_.begin(), firedGroups_.end(), t.group) != firedGroups_.end()) continue;
+        firedGroups_.push_back(t.group);
+        spawnGroup(t.group, mover.x, mover.y);
+    }
+}
+
+void Battle::spawnGroup(const std::string& group, int tx, int ty) {
+    int count = 0;
+    for (auto& u : units_) {
+        if (u.active || u.group != group || !u.alive) continue;
+        if (unitAt(u.x, u.y)) {   // spawn tile taken: use the nearest free passable tile
+            int best = INT_MAX, bx = -1, by = -1;
+            for (int y = 0; y < height(); ++y)
+                for (int x = 0; x < width(); ++x) {
+                    if (unitAt(x, y) || terrainAt(x, y).moveCost(u.def->cls) == 0) continue;
+                    int d = manhattan(x, y, u.x, u.y);
+                    if (d < best) { best = d; bx = x; by = y; }
+                }
+            if (bx >= 0) { u.x = bx; u.y = by; }
+        }
+        u.active = true;
+        ++count;
+    }
+    if (count == 0) return;
+    BattleEvent e;
+    e.kind = BattleEvent::Kind::Spawn;
+    e.ax = e.bx = tx;
+    e.ay = e.by = ty;
+    e.side = Side::Enemy;
+    e.text = "Hinterhalt! Feindliche Verstärkung ist aufgetaucht!";
+    emit(e);
+}
+
+// ---------------------------------------------------------------------------------
 // Combat
 // ---------------------------------------------------------------------------------
 bool Battle::weaponReady(const Unit& u, int wi) const {
@@ -376,7 +444,7 @@ bool Battle::weaponReady(const Unit& u, int wi) const {
 }
 
 bool Battle::canAttack(const Unit& a, int wi, const Unit& t) const {
-    if (!a.alive || !t.alive || a.side == t.side || a.actionsLeft <= 0) return false;
+    if (!a.present() || !t.present() || a.side == t.side || a.attacksLeft <= 0) return false;
     if (!((a.side == Side::Player && phase_ == Phase::PlayerTurn) ||
           (a.side == Side::Enemy && phase_ == Phase::EnemyTurn)))
         return false;
@@ -397,8 +465,7 @@ bool Battle::attack(Unit& a, int wi, Unit& t) {
     int willBefore = t.will;
     t.will = std::max(0, t.will - w.willDamage);
     a.cooldown[wi] = w.cooldown > 0 ? w.cooldown + 1 : 0;
-    a.attacked = true;
-    --a.actionsLeft;
+    --a.attacksLeft;
 
     BattleEvent e;
     e.kind = BattleEvent::Kind::Attack;
@@ -458,7 +525,7 @@ std::vector<int> Battle::distanceField(int gx, int gy, UnitClass c) const {
 
 bool Battle::aiAttack(Unit& u) {
     bool acted = false;
-    while (u.alive && u.actionsLeft > 0 && phase_ == Phase::EnemyTurn) {
+    while (u.alive && u.attacksLeft > 0 && phase_ == Phase::EnemyTurn) {
         int bestW = -1;
         Unit* bestT = nullptr;
         float bestScore = -1.f;
@@ -547,8 +614,9 @@ void Battle::stepAI() {
         aiQueue_.pop_front();
         Unit* u = unitById(id);
         if (!u || !u->alive) continue;
-        bool acted = aiAttack(*u);
-        if (!acted && phase_ == Phase::EnemyTurn) acted = aiMove(*u);
+        bool acted = aiAttack(*u);                        // shoot what is already in range
+        if (phase_ == Phase::EnemyTurn && aiMove(*u)) acted = true;
+        if (phase_ == Phase::EnemyTurn && aiAttack(*u)) acted = true;   // ...and again after moving
         if (phase_ != Phase::EnemyTurn) return;   // game ended during this action
         if (acted) return;
     }

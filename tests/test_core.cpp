@@ -39,7 +39,7 @@ static void testData(GameData& d) {
         if (u.isInfantry()) CHECK(u.armour == 0);
     }
     CHECK(d.unit("heavy_tank")->armour == 10);
-    CHECK(d.unit("light_tank")->maxActions() == 2);
+    CHECK(d.unit("light_tank")->maxAttacks() == 2);
     CHECK(d.missions().size() >= 5);
     for (auto& m : d.missions()) Battle b(d, m);   // throws if a map is broken
 }
@@ -71,8 +71,9 @@ static void testRules(GameData& d) {
     CHECK(r[7 * 12 + 4] == -1);                // forest (cost 2) -> total 4 > 3 move points
     CHECK(r[7 * 12 + 3] == -1);                // 4 tiles away
     CHECK(b.moveUnit(*u, 4, 8));
-    CHECK(!b.canMove(*u));                     // one action per turn
+    CHECK(!b.canMove(*u));                     // one move per turn
     CHECK(!b.moveUnit(*u, 4, 7));
+    CHECK(u->attacksLeft == 1);                // ...but the unit may still shoot after moving
 }
 
 static void testWillAndCooldown(GameData& d) {
@@ -92,7 +93,8 @@ static void testWillAndCooldown(GameData& d) {
     CHECK(en->hp < hp0);
     CHECK(en->will == en->def->will - 2);
     CHECK(tr->cooldown[1] == 3);               // grenade cooldown 2 -> unusable for the next 2 turns
-    CHECK(!b.canAttack(*tr, 0, *en));          // no actions left
+    CHECK(!b.canAttack(*tr, 0, *en));          // one attack per turn, already used
+    CHECK(b.canMove(*tr));                     // moving is still possible after shooting
     // run one full round
     b.endPlayerTurn();
     while (b.phase() == Phase::EnemyTurn) b.stepAI();
@@ -157,6 +159,30 @@ static void testCaptureCamoRadio(GameData& d) {
         b.startBattle();
         CHECK(b.weaponReady(*b.unitAt(4, 10), 0));
     }
+}
+
+static void testFogAndTriggers(GameData& d) {
+    Battle b(d, *d.mission("dawn_2"));
+    b.deploy(*d.unit("rifleman"), 5, 9);
+    b.startBattle();
+    Unit* me = b.unitAt(5, 9);
+    // vision: rifleman sees 5 tiles
+    CHECK(b.tileVisible(5, 4, Side::Player));
+    CHECK(!b.tileVisible(5, 3, Side::Player));
+    // dormant group is invisible, not blocking and not attackable
+    int dormant = 0;
+    for (auto& u : b.units()) if (!u.active) { ++dormant; CHECK(!b.visibleTo(u, Side::Player)); CHECK(b.unitAt(u.x, u.y) == nullptr); }
+    CHECK(dormant == 2);
+    CHECK(b.aliveCount(Side::Enemy) >= 7);     // dormant units still count as enemies
+    // walking onto the trigger zone (8..10, 6..7) wakes the group
+    me->x = 8; me->y = 8;
+    CHECK(b.moveUnit(*me, 8, 7));
+    int active = 0;
+    for (auto& u : b.units()) if (u.group == "ambush" && u.active) ++active;
+    CHECK(active == 2);
+    bool sawSpawn = false;
+    for (auto& e : b.takeEvents()) if (e.kind == BattleEvent::Kind::Spawn) sawSpawn = true;
+    CHECK(sawSpawn);
 }
 
 // Random-ish games: random player, built-in AI. Must terminate without crashing.
@@ -231,6 +257,7 @@ int main(int argc, char** argv) {
         testRules(d);
         testWillAndCooldown(d);
         testCaptureCamoRadio(d);
+        testFogAndTriggers(d);
         testSimulation(d);
     } catch (const std::exception& e) {
         std::cerr << "EXCEPTION: " << e.what() << "\n";
