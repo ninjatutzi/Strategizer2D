@@ -61,18 +61,28 @@ void Battle::loadMap(const std::string& path) {
                     deployZone_.emplace_back(x, y);
                 }
         } else if (section == "[buildings]") {
+            // type,x,y,owner[,role[,hp[,armour[,name]]]]   role: capture (default) | protect | none
             auto p = split(line, ',');
-            if (p.size() < 4) fail(lineNo, "building line must be name,x,y,owner[,objective[,hp[,armour]]]");
+            if (p.size() < 4) fail(lineNo, "building line must be type,x,y,owner[,role[,hp[,armour[,name]]]]");
             Building b;
-            b.name = trim(p[0]);
+            b.def = data_.building(toLower(trim(p[0])));
+            if (!b.def) fail(lineNo, "unknown building type '" + trim(p[0]) + "' (see data/buildings.csv)");
             b.x = std::atoi(trim(p[1]).c_str());
             b.y = std::atoi(trim(p[2]).c_str());
             std::string o = toLower(trim(p[3]));
             b.owner = o == "player" ? Side::Player : o == "enemy" ? Side::Enemy : Side::Neutral;
-            b.objective = p.size() < 5 || trim(p[4]) != "0";
+            std::string role = p.size() > 4 ? toLower(trim(p[4])) : "capture";
+            b.objective = role.empty() || role == "1" || role == "capture";
+            b.protect = role == "protect";
+            if (!b.objective && !b.protect && role != "0" && role != "none") fail(lineNo, "role must be capture, protect or none");
+            b.hp = b.maxHp = b.def->hp;
+            b.armour = b.def->armour;
             if (p.size() > 5 && !trim(p[5]).empty()) b.hp = b.maxHp = std::max(1, std::atoi(trim(p[5]).c_str()));
             if (p.size() > 6 && !trim(p[6]).empty()) b.armour = std::max(0, std::atoi(trim(p[6]).c_str()));
+            b.name = p.size() > 7 && !trim(p[7]).empty() ? trim(p[7]) : b.def->name;
             if (!inBounds(b.x, b.y)) fail(lineNo, "building outside the map");
+            if (b.protect && b.owner != Side::Player) fail(lineNo, "a protected building must be owned by the player");
+            for (size_t i = 0; i < b.def->weapons.size(); ++i) b.ammo[i] = b.def->weapons[i].ammo;
             buildings_.push_back(b);
         } else if (section == "[triggers]") {
             auto p = split(line, ',');
@@ -95,9 +105,7 @@ void Battle::loadMap(const std::string& path) {
             u.side = Side::Enemy;
             u.x = std::atoi(trim(p[1]).c_str());
             u.y = std::atoi(trim(p[2]).c_str());
-            u.hp = def->hp;
-            u.will = def->will;
-            u.fuel = def->fuel;
+            initUnit(u, *def);
             u.holdPosition = p.size() > 3 && toLower(trim(p[3])) == "hold";
             if (p.size() > 4 && !trim(p[4]).empty()) {
                 u.group = toLower(trim(p[4]));
@@ -131,13 +139,58 @@ void Battle::loadMap(const std::string& path) {
             throw std::runtime_error(path + ": enemy group '" + u.group + "' has no [triggers] entry");
         if (terrainAt(u.x, u.y).moveCost(u.def->cls) == 0)
             throw std::runtime_error(path + ": enemy '" + u.def->id + "' placed on impassable terrain");
+        if (blockedByBuilding(u.x, u.y))
+            throw std::runtime_error(path + ": enemy '" + u.def->id + "' placed on a building (units cannot stand on buildings)");
         for (auto& o : units_)
             if (&o != &u && o.x == u.x && o.y == u.y)
                 throw std::runtime_error(path + ": two enemies on tile " + std::to_string(u.x) + "," + std::to_string(u.y));
     }
+    for (auto& b : buildings_)
+        for (auto& o : buildings_)
+            if (&b != &o && b.x == o.x && b.y == o.y) throw std::runtime_error(path + ": two buildings on one tile");
     if (mission_.objective == Objective::Capture &&
         std::none_of(buildings_.begin(), buildings_.end(), [](const Building& b) { return b.objective; }))
         throw std::runtime_error(path + ": capture mission needs at least one objective building");
+}
+
+void Battle::initUnit(Unit& u, const UnitDef& def) const {
+    u.def = &def;
+    u.hp = def.hp;
+    u.will = def.will;
+    u.fuel = def.fuel;
+    u.ammo.fill(-1);
+    for (size_t i = 0; i < def.weapons.size() && i < u.ammo.size(); ++i) u.ammo[i] = def.weapons[i].ammo;
+}
+
+bool Battle::blockedByBuilding(int x, int y) const {
+    for (auto& b : buildings_) if (b.x == x && b.y == y && !b.destroyed) return true;
+    return false;
+}
+
+int Battle::incomeNow() const {
+    int sum = 0;
+    for (auto& b : buildings_) if (b.owner == Side::Player && !b.destroyed) sum += b.def->income;
+    return sum;
+}
+
+std::vector<ObjectiveLine> Battle::objectiveLines() const {
+    std::vector<ObjectiveLine> out;
+    if (mission_.objective == Objective::Capture) {
+        int total = 0, done = 0;
+        for (auto& b : buildings_) if (b.objective) { ++total; if (b.owner == Side::Player || b.destroyed) ++done; }
+        out.push_back({"Gebäude einnehmen oder zerstören: " + std::to_string(done) + " / " + std::to_string(total), done == total});
+    } else if (mission_.objective == Objective::Eliminate) {
+        out.push_back({"Gegner vernichten (bisher " + std::to_string(kills_) + ")", false});
+    } else {
+        out.push_back({"Durchhalten bis Runde " + std::to_string(mission_.maxTurns) + " endet (jetzt Runde " +
+                       std::to_string(std::min(round_, mission_.maxTurns)) + ")", false});
+    }
+    for (auto& b : buildings_)
+        if (b.protect) {
+            bool ok = !b.destroyed && b.owner == Side::Player;
+            out.push_back({"Halte: " + b.name + (ok ? "" : " (verloren!)"), ok});
+        }
+    return out;
 }
 
 // ---------------------------------------------------------------------------------
@@ -229,20 +282,17 @@ int Battle::budgetLeft() const {
 
 bool Battle::canDeploy(const UnitDef& def, int x, int y) const {
     return phase_ == Phase::Deploy && inBounds(x, y) && inDeployZone(x, y) && !unitAt(x, y) &&
-           terrainAt(x, y).moveCost(def.cls) > 0 && def.cost <= budgetLeft();
+           terrainAt(x, y).moveCost(def.cls) > 0 && !blockedByBuilding(x, y) && def.cost <= budgetLeft();
 }
 
 bool Battle::deploy(const UnitDef& def, int x, int y) {
     if (!canDeploy(def, x, y)) return false;
     Unit u;
     u.id = nextId_++;
-    u.def = &def;
+    initUnit(u, def);
     u.side = Side::Player;
     u.x = x;
     u.y = y;
-    u.hp = def.hp;
-    u.will = def.will;
-    u.fuel = def.fuel;
     units_.push_back(u);
     return true;
 }
@@ -259,6 +309,7 @@ bool Battle::undeploy(int x, int y) {
 
 bool Battle::startBattle() {
     if (phase_ != Phase::Deploy || aliveCount(Side::Player) == 0) return false;
+    money_ = std::max(0, budgetLeft());   // unspent deployment budget becomes money for the shop
     phase_ = Phase::PlayerTurn;
     round_ = 1;
     beginPhase(Side::Player);
@@ -270,6 +321,12 @@ bool Battle::startBattle() {
 // Turn flow
 // ---------------------------------------------------------------------------------
 void Battle::beginPhase(Side s) {
+    for (auto& b : buildings_) {
+        if (b.owner != s || b.destroyed) continue;
+        b.attacksLeft = b.def->attacks;
+        b.recruitsLeft = b.def->recruits;
+        for (auto& c : b.cooldown) if (c > 0) --c;
+    }
     for (auto& u : units_) {
         if (!u.alive || u.side != s) continue;
         u.attacksLeft = u.def->maxAttacks();
@@ -311,6 +368,9 @@ void Battle::finish(Phase p, const std::string& reason) {
 
 void Battle::checkEnd() {
     if (phase_ != Phase::PlayerTurn && phase_ != Phase::EnemyTurn) return;
+    for (auto& b : buildings_)
+        if (b.protect && (b.destroyed || b.owner != Side::Player))
+            return finish(Phase::Lost, b.name + " ging verloren!");
     if (aliveCount(Side::Enemy) == 0) return finish(Phase::Won, "Alle gegnerischen Truppen wurden vernichtet!");
     if (aliveCount(Side::Player) == 0) return finish(Phase::Lost, "Alle deine Truppen wurden vernichtet!");
     if (mission_.objective == Objective::Capture) {
@@ -323,6 +383,11 @@ void Battle::checkEnd() {
 void Battle::endPlayerTurn() {
     if (phase_ != Phase::PlayerTurn) return;
     endPhase(Side::Player);
+    int income = incomeNow();
+    if (income > 0) {
+        money_ += income;
+        message("Einnahmen: +" + std::to_string(income) + " Geld");
+    }
     phase_ = Phase::EnemyTurn;
     beginPhase(Side::Enemy);
     aiQueue_.clear();
@@ -356,7 +421,7 @@ std::vector<int> Battle::dijkstra(const Unit& u) const {
             int nx = cx + dx[k], ny = cy + dy[k];
             if (!inBounds(nx, ny)) continue;
             int cost = terrainAt(nx, ny).moveCost(u.def->cls);
-            if (cost <= 0) continue;
+            if (cost <= 0 || blockedByBuilding(nx, ny)) continue;   // nobody can stand on (or walk through) buildings
             const Unit* o = unitAt(nx, ny);
             if (o && o->side != u.side) continue;   // enemies block, friends can be passed
             int nd = d + cost;
@@ -394,26 +459,30 @@ bool Battle::moveUnit(Unit& u, int x, int y) {
     u.moved = true;
     if (u.def->fuel > 0) --u.fuel;   // one fuel per turn in which a vehicle moves
     emit(e);
-    tryCapture(u);
     if (u.side == Side::Player) checkTriggers(u);
     checkEnd();
     return true;
 }
 
-void Battle::tryCapture(Unit& u) {
-    if (!u.def->isInfantry()) return;   // only infantry can take buildings
-    for (auto& b : buildings_) {
-        if (b.x == u.x && b.y == u.y && b.owner != u.side && !b.destroyed) {
-            b.owner = u.side;
-            BattleEvent e;
-            e.kind = BattleEvent::Kind::Capture;
-            e.ax = e.bx = b.x;
-            e.ay = e.by = b.y;
-            e.side = u.side;
-            e.text = b.name + (u.side == Side::Player ? " eingenommen!" : " vom Gegner eingenommen!");
-            emit(e);
-        }
-    }
+// Capturing: an infantry unit that can still move and stands next to the building takes it
+// (this uses up its move for the turn).
+bool Battle::canCapture(const Unit& u, const Building& b) const {
+    return u.present() && u.def->isInfantry() && canMove(u) && !b.destroyed && b.owner != u.side &&
+           manhattan(u.x, u.y, b.x, b.y) == 1;
+}
+
+bool Battle::captureBuilding(Unit& u, Building& b) {
+    if (!canCapture(u, b)) return false;
+    b.owner = u.side;
+    u.moved = true;
+    BattleEvent e;
+    e.kind = BattleEvent::Kind::Capture;
+    e.ax = u.x; e.ay = u.y; e.bx = b.x; e.by = b.y;
+    e.side = u.side;
+    e.text = b.name + (u.side == Side::Player ? " eingenommen!" : " vom Gegner eingenommen!");
+    emit(e);
+    checkEnd();
+    return true;
 }
 
 // ---------------------------------------------------------------------------------
@@ -433,11 +502,11 @@ void Battle::spawnGroup(const std::string& group, int tx, int ty) {
     int count = 0;
     for (auto& u : units_) {
         if (u.active || u.group != group || !u.alive) continue;
-        if (unitAt(u.x, u.y)) {   // spawn tile taken: use the nearest free passable tile
+        if (unitAt(u.x, u.y) || blockedByBuilding(u.x, u.y)) {   // spawn tile taken: use the nearest free passable tile
             int best = INT_MAX, bx = -1, by = -1;
             for (int y = 0; y < height(); ++y)
                 for (int x = 0; x < width(); ++x) {
-                    if (unitAt(x, y) || terrainAt(x, y).moveCost(u.def->cls) == 0) continue;
+                    if (unitAt(x, y) || blockedByBuilding(x, y) || terrainAt(x, y).moveCost(u.def->cls) == 0) continue;
                     int d = manhattan(x, y, u.x, u.y);
                     if (d < best) { best = d; bx = x; by = y; }
                 }
@@ -461,13 +530,27 @@ void Battle::spawnGroup(const std::string& group, int tx, int ty) {
 // ---------------------------------------------------------------------------------
 bool Battle::weaponReady(const Unit& u, int wi) const {
     if (wi < 0 || wi >= static_cast<int>(u.def->weapons.size())) return false;
-    if (u.cooldown[wi] > 0) return false;
+    if (u.cooldown[wi] > 0 || u.ammo[wi] == 0) return false;   // cooling down or out of ammo
     if (u.def->weapons[wi].needsRadio && !hasRadio(u.side)) return false;
     return true;
 }
 
 namespace {
-bool supportUseful(const WeaponDef& w, const Unit& t) {
+
+int supplySlot(const Unit& u) {   // weapon index of a supply weapon with limited uses (supply trucks), or -1
+    for (size_t i = 0; i < u.def->weapons.size(); ++i)
+        if (u.def->weapons[i].type == WeaponType::Supply && u.def->weapons[i].ammo > 0) return static_cast<int>(i);
+    return -1;
+}
+
+bool needsAmmo(const Unit& t) {
+    for (size_t i = 0; i < t.def->weapons.size(); ++i)
+        if (t.def->weapons[i].ammo > 0 && t.ammo[i] >= 0 && t.ammo[i] < t.def->weapons[i].ammo) return true;
+    return false;
+}
+
+// srcAmmo = uses the supporting weapon has left before this use (-1 = unlimited)
+bool supportUseful(const WeaponDef& w, int srcAmmo, const Unit& t) {
     const bool inf = t.def->isInfantry();
     const bool needsHp = t.hp < t.def->hp;
     const bool needsFuel = t.def->fuel > 0 && t.fuel < t.def->fuel;
@@ -475,11 +558,18 @@ bool supportUseful(const WeaponDef& w, const Unit& t) {
     case WeaponType::Heal: return inf && needsHp;
     case WeaponType::Repair: return !inf && needsHp;
     case WeaponType::Refuel: return !inf && needsFuel;
-    case WeaponType::Supply: return !inf && (needsHp || needsFuel);
+    case WeaponType::Supply: {
+        int slot = supplySlot(t);
+        if (slot >= 0)   // another supply truck: top up its supplies (needs at least 1 left after the use itself)
+            return t.ammo[slot] < t.def->weapons[slot].ammo && (srcAmmo < 0 || srcAmmo >= 2);
+        return needsAmmo(t) || needsFuel;
+    }
     default: return false;
     }
 }
+
 } // namespace
+
 
 bool Battle::canAttack(const Unit& a, int wi, const Unit& t) const {
     if (!a.present() || !t.present() || &a == &t || a.attacksLeft <= 0) return false;
@@ -489,7 +579,7 @@ bool Battle::canAttack(const Unit& a, int wi, const Unit& t) const {
     if (!weaponReady(a, wi)) return false;
     const WeaponDef& w = a.def->weapons[wi];
     if (w.isSupport()) {
-        if (t.side != a.side || !supportUseful(w, t)) return false;   // only friendly units that need it
+        if (t.side != a.side || !supportUseful(w, a.ammo[wi], t)) return false;   // only friendly units that need it
     } else if (t.side == a.side || !visibleTo(t, a.side)) {
         return false;
     }
@@ -500,37 +590,75 @@ bool Battle::canAttack(const Unit& a, int wi, const Unit& t) const {
 int Battle::previewDamage(const Unit& a, int wi, const Unit& t) const {
     const WeaponDef& w = a.def->weapons[wi];
     if (w.isSupport()) {
-        if (w.type == WeaponType::Refuel) return 0;
+        if (w.type != WeaponType::Heal && w.type != WeaponType::Repair) return 0;
         return std::min(static_cast<int>(std::lround(w.damage)), t.def->hp - t.hp);
     }
     return computeDamage(w, t.def->armour, terrainAt(t.x, t.y).damageMult);
+}
+
+// Applies a support weapon to the target. srcAmmo is the supporting weapon's uses left AFTER paying
+// for this use (it is reduced further when supplies are handed to another supply truck).
+Battle::SupportResult Battle::applySupport(const WeaponDef& w, int& srcAmmo, Unit& t) {
+    SupportResult r;
+    switch (w.type) {
+    case WeaponType::Heal:
+    case WeaponType::Repair:
+        r.healed = std::min(static_cast<int>(std::lround(w.damage)), t.def->hp - t.hp);
+        t.hp += r.healed;
+        break;
+    case WeaponType::Refuel:
+        if (t.def->fuel > 0 && t.fuel < t.def->fuel) { t.fuel = t.def->fuel; r.refuelled = true; }
+        break;
+    case WeaponType::Supply: {
+        int slot = supplySlot(t);
+        if (slot >= 0) {
+            // supply truck -> supply truck: add to the target, subtract from the giver (no full refill)
+            int room = t.def->weapons[slot].ammo - t.ammo[slot];
+            int give = std::min({static_cast<int>(std::lround(w.damage)), room, srcAmmo < 0 ? room : srcAmmo});
+            if (give > 0) {
+                t.ammo[slot] += give;
+                if (srcAmmo >= 0) srcAmmo -= give;
+                r.transferred = give;
+            }
+        } else {
+            for (size_t i = 0; i < t.def->weapons.size(); ++i)
+                if (t.def->weapons[i].ammo > 0 && t.ammo[i] < t.def->weapons[i].ammo) {
+                    t.ammo[i] = t.def->weapons[i].ammo;
+                    r.rearmed = true;
+                }
+            if (t.def->fuel > 0 && t.fuel < t.def->fuel) { t.fuel = t.def->fuel; r.refuelled = true; }
+        }
+        break;
+    }
+    default: break;
+    }
+    return r;
+}
+
+std::string Battle::supportText(const std::string& who, const std::string& weapon, const Unit& t, const SupportResult& r) const {
+    std::string s = who + " versorgt " + t.def->name + " (" + weapon + "):";
+    if (r.healed > 0) s += " +" + std::to_string(r.healed) + " HP";
+    if (r.rearmed) s += " Munition aufgefüllt";
+    if (r.refuelled) s += " Treibstoff aufgefüllt";
+    if (r.transferred > 0) s += " " + std::to_string(r.transferred) + " Supply übertragen";
+    return s;
 }
 
 bool Battle::attack(Unit& a, int wi, Unit& t) {
     if (!canAttack(a, wi, t)) return false;
     const WeaponDef& w = a.def->weapons[wi];
     a.cooldown[wi] = w.cooldown > 0 ? w.cooldown + 1 : 0;
+    if (a.ammo[wi] > 0) --a.ammo[wi];   // one shot / use
     --a.attacksLeft;
 
     if (w.isSupport()) {
-        int healed = 0;
-        if (w.type != WeaponType::Refuel) {
-            healed = previewDamage(a, wi, t);
-            t.hp += healed;
-        }
-        bool refuelled = false;
-        if ((w.type == WeaponType::Refuel || w.type == WeaponType::Supply) && t.def->fuel > 0 && t.fuel < t.def->fuel) {
-            t.fuel = t.def->fuel;
-            refuelled = true;
-        }
+        SupportResult r = applySupport(w, a.ammo[wi], t);
         BattleEvent e;
         e.kind = BattleEvent::Kind::Heal;
         e.ax = a.x; e.ay = a.y; e.bx = t.x; e.by = t.y;
-        e.damage = healed;
+        e.damage = r.healed;
         e.side = a.side;
-        e.text = a.def->name + " versorgt " + t.def->name + " (" + w.name + "):";
-        if (healed > 0) e.text += " +" + std::to_string(healed) + " HP";
-        if (refuelled) e.text += " Treibstoff aufgefüllt";
+        e.text = supportText(a.def->name, w.name, t, r);
         emit(e);
         return true;
     }
@@ -558,6 +686,11 @@ bool Battle::attack(Unit& a, int wi, Unit& t) {
         d.ay = d.by = t.y;
         d.side = t.side;
         d.text = t.def->name + " wurde vernichtet";
+        if (a.side == Side::Player) {   // bounty for every kill
+            money_ += data_.killReward();
+            ++kills_;
+            d.text += " (+" + std::to_string(data_.killReward()) + " Geld)";
+        }
         emit(d);
     }
     checkEnd();
@@ -586,6 +719,7 @@ bool Battle::attackBuilding(Unit& a, int wi, Building& b) {
     int dmg = previewDamageBuilding(a, wi, b);
     b.hp -= dmg;
     a.cooldown[wi] = w.cooldown > 0 ? w.cooldown + 1 : 0;
+    if (a.ammo[wi] > 0) --a.ammo[wi];
     --a.attacksLeft;
 
     BattleEvent e;
@@ -610,6 +744,87 @@ bool Battle::attackBuilding(Unit& a, int wi, Building& b) {
     return true;
 }
 
+// ---- building actions (supply post etc.) -----------------------------------------------
+bool Battle::buildingWeaponReady(const Building& b, int wi) const {
+    if (wi < 0 || wi >= static_cast<int>(b.def->weapons.size())) return false;
+    return b.cooldown[wi] == 0 && b.ammo[wi] != 0;
+}
+
+bool Battle::canBuildingSupport(const Building& b, int wi, const Unit& t) const {
+    if (phase_ != Phase::PlayerTurn || b.owner != Side::Player || b.destroyed || b.attacksLeft <= 0) return false;
+    if (!buildingWeaponReady(b, wi) || !t.present() || t.side != Side::Player) return false;
+    const WeaponDef& w = b.def->weapons[wi];
+    if (!w.isSupport() || !supportUseful(w, b.ammo[wi], t)) return false;
+    int d = manhattan(b.x, b.y, t.x, t.y);
+    return d >= 1 && d <= w.range;
+}
+
+int Battle::previewSupport(const Building& b, int wi, const Unit& t) const {
+    const WeaponDef& w = b.def->weapons[wi];
+    if (w.type != WeaponType::Heal && w.type != WeaponType::Repair) return 0;
+    return std::min(static_cast<int>(std::lround(w.damage)), t.def->hp - t.hp);
+}
+
+bool Battle::buildingSupport(Building& b, int wi, Unit& t) {
+    if (!canBuildingSupport(b, wi, t)) return false;
+    const WeaponDef& w = b.def->weapons[wi];
+    b.cooldown[wi] = w.cooldown > 0 ? w.cooldown + 1 : 0;
+    if (b.ammo[wi] > 0) --b.ammo[wi];
+    --b.attacksLeft;
+    SupportResult r = applySupport(w, b.ammo[wi], t);
+    BattleEvent e;
+    e.kind = BattleEvent::Kind::Heal;
+    e.ax = b.x; e.ay = b.y; e.bx = t.x; e.by = t.y;
+    e.damage = r.healed;
+    e.side = Side::Player;
+    e.text = supportText(b.name, w.name, t, r);
+    emit(e);
+    return true;
+}
+
+// ---- shop ---------------------------------------------------------------------------------
+bool Battle::findSpawnTile(const Building& b, UnitClass cls, int& ox, int& oy) const {
+    for (int r = 1; r <= 3; ++r)
+        for (int y = b.y - r; y <= b.y + r; ++y)
+            for (int x = b.x - r; x <= b.x + r; ++x) {
+                if (std::abs(x - b.x) + std::abs(y - b.y) != r || !inBounds(x, y)) continue;
+                if (unitAt(x, y) || blockedByBuilding(x, y) || terrainAt(x, y).moveCost(cls) == 0) continue;
+                ox = x; oy = y;
+                return true;
+            }
+    return false;
+}
+
+bool Battle::canRecruit(const Building& b, const UnitDef& def) const {
+    int x, y;
+    return phase_ == Phase::PlayerTurn && b.owner == Side::Player && !b.destroyed && b.def->recruits > 0 &&
+           b.recruitsLeft > 0 && money_ >= def.cost && findSpawnTile(b, def.cls, x, y);
+}
+
+bool Battle::recruit(Building& b, const UnitDef& def) {
+    int x, y;
+    if (!canRecruit(b, def) || !findSpawnTile(b, def.cls, x, y)) return false;
+    Unit u;
+    u.id = nextId_++;
+    initUnit(u, def);
+    u.side = Side::Player;
+    u.x = x;
+    u.y = y;
+    u.moved = true;       // freshly bought units can act from the next turn on
+    u.attacksLeft = 0;
+    units_.push_back(u);
+    money_ -= def.cost;
+    --b.recruitsLeft;
+    BattleEvent e;
+    e.kind = BattleEvent::Kind::Recruit;
+    e.ax = e.bx = x;
+    e.ay = e.by = y;
+    e.side = Side::Player;
+    e.text = def.name + " gekauft (-" + std::to_string(def.cost) + " Geld)";
+    emit(e);
+    return true;
+}
+
 // ---------------------------------------------------------------------------------
 // AI
 // ---------------------------------------------------------------------------------
@@ -628,7 +843,7 @@ std::vector<int> Battle::distanceField(int gx, int gy, UnitClass c) const {
         int cx = idx % w, cy = idx / w;
         // cost of stepping from the neighbour onto (cx,cy) = entry cost of (cx,cy)
         int step = (idx == gy * w + gx) ? 1 : terrainAt(cx, cy).moveCost(c);
-        if (step <= 0) continue;
+        if (step <= 0 || (idx != gy * w + gx && blockedByBuilding(cx, cy))) continue;
         for (int k = 0; k < 4; ++k) {
             int nx = cx + dx[k], ny = cy + dy[k];
             if (!inBounds(nx, ny)) continue;
@@ -663,15 +878,39 @@ bool Battle::aiAttack(Unit& u) {
                 }
             }
         }
-        if (!bestT) break;
+        if (!bestT) {
+            // no unit to shoot: bombard a player building in range (protected ones first)
+            int bw = -1;
+            Building* bb = nullptr;
+            float bs = -1.f;
+            for (int wi = 0; wi < static_cast<int>(u.def->weapons.size()); ++wi) {
+                if (u.def->weapons[wi].isSupport()) continue;
+                for (auto& b : buildings_) {
+                    if (!canAttackBuilding(u, wi, b)) continue;
+                    float score = static_cast<float>(previewDamageBuilding(u, wi, b)) + (b.protect ? 500.f : 0.f);
+                    if (score > bs) { bs = score; bw = wi; bb = &b; }
+                }
+            }
+            if (!bb || !attackBuilding(u, bw, *bb)) break;
+            acted = true;
+            continue;
+        }
         if (!attack(u, bestW, *bestT)) break;
         acted = true;
     }
     return acted;
 }
 
+bool Battle::aiWantsBuilding(const Building& b) const {
+    if (b.destroyed || b.owner == Side::Enemy) return false;
+    return b.protect || (mission_.objective == Objective::Capture && b.objective);
+}
+
 bool Battle::aiMove(Unit& u) {
     if (u.holdPosition || !canMove(u)) return false;
+    if (u.def->isInfantry())   // standing next to a building the AI wants: take it instead of walking
+        for (auto& b : buildings_)
+            if (aiWantsBuilding(b) && canCapture(u, b)) return captureBuilding(u, b);
 
     // pick a goal: nearest player unit, or (infantry in capture missions) the nearest
     // building not yet held by the enemy when no player unit is close
@@ -684,9 +923,9 @@ bool Battle::aiMove(Unit& u) {
     }
     const Building* bld = nullptr;
     int bldD = INT_MAX;
-    if (u.def->isInfantry() && mission_.objective == Objective::Capture) {
+    if (u.def->isInfantry()) {
         for (auto& b : buildings_) {
-            if (!b.objective || b.owner == Side::Enemy || b.destroyed) continue;
+            if (!aiWantsBuilding(b)) continue;
             int d = manhattan(u.x, u.y, b.x, b.y);
             if (d < bldD) { bldD = d; bld = &b; }
         }
@@ -722,7 +961,8 @@ void Battle::stepAI() {
             endPhase(Side::Enemy);
             ++round_;
             if (mission_.maxTurns > 0 && round_ > mission_.maxTurns) {
-                finish(Phase::Lost, "Die Zeit ist abgelaufen!");
+                if (mission_.objective == Objective::Survive) finish(Phase::Won, "Du hast durchgehalten!");
+                else finish(Phase::Lost, "Die Zeit ist abgelaufen!");
                 return;
             }
             phase_ = Phase::PlayerTurn;

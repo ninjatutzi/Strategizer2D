@@ -17,8 +17,10 @@ MMPPPPPPPPMM
 2,9,9,11
 
 [buildings]
-North Outpost,4,1,enemy,1,120
-East Outpost,9,5,enemy,1,120
+# type,x,y,owner,role[,hp[,armour[,name]]]   types: see data/buildings.csv   role: capture | protect | none
+outpost,4,1,enemy,capture,120,0,North Outpost
+outpost,9,5,enemy,capture,120,0,East Outpost
+supplypost,5,8,neutral,none
 
 [triggers]
 flank,3,5,8,6

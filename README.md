@@ -56,9 +56,24 @@ ihre Reichweite angezeigt (orange). Beim Überfahren eines Ziels siehst du den S
 * **Willenskraft:** Treffer senken sie (`will_damage`). Bei 0 kann sich die Truppe in ihrem nächsten Zug
   nicht bewegen. Nach diesem Zug ist sie wieder auf dem Standardwert.
 * **Waffen-Abklingzeit** (`cooldown`): so viele eigene Züge ist die Waffe nach dem Schuss gesperrt.
-* **Gebäude** (★ = Missionsziel) kann nur **Infanterie** einnehmen (auf das Feld ziehen genügt) – man kann sie aber auch
-  **zerstören**: jede Waffe kann Gebäude beschießen (Waffe wählen, Gebäude anklicken). Ein zerstörtes Gebäude zählt als
-  erledigtes Ziel, so ist ein Sieg auch ohne Infanterie möglich. HP/Rüstung pro Gebäude stehen in der Karte.
+* **Gebäude** blockieren ihr Feld – **niemand kann auf einem Gebäude stehen**. Infanterie, die **neben** einem Gebäude
+  steht und sich noch bewegen kann, nimmt es per **Klick auf das Gebäude** ein (verbraucht die Bewegung). Man kann Gebäude
+  auch **zerstören**: jede Waffe kann sie beschießen (Waffe wählen, Gebäude anklicken). Ein zerstörtes Ziel-Gebäude
+  zählt als erledigt, so ist ein Sieg auch ohne Infanterie möglich. Gebäudetypen (HP, Rüstung, Einkommen, Aktionen) stehen
+  in `data/buildings.csv`: **Outpost** (Truppen kaufen), **Supply Post** (unbegrenzt heilen/reparieren/versorgen), **Bunker**.
+* **Munition:** Jede Waffe hat eine begrenzte Anzahl Schüsse (`ammo` in `weapons.csv`, pro Truppe überschreibbar mit
+  `ammo1`–`ammo5` in `units.csv`; z. B. Rifleman 3, Trooper 4). `0` oder leer = unbegrenzt. Leere Waffen sind gesperrt, bis
+  ein **Supply** (Supply Truck) die Truppe auffüllt: *Supply* füllt **alle** Munition und den Treibstoff auf. Der Supply
+  ist selbst begrenzt (5 Einsätze). Versorgt ein Supply Truck einen anderen Supply Truck, wird addiert/subtrahiert
+  (der Geber gibt `damage` Einsätze ab, der Empfänger bekommt sie) statt komplett aufzufüllen. Supply Truck: 3 Aktionen pro
+  Runde (Supply, Repair für Fahrzeuge, Light Heal für Infanterie).
+* **Geld:** Übrig gebliebenes Aufstellungs-Budget wird zu Geld. Es gibt Geld für jeden Abschuss (`kill_reward` in
+  `data/rules.csv`, Standard 5) und Einkommen für jedes eigene Gebäude, wenn du deinen Zug beendest (Outpost 10,
+  Supply Post 5, Bunker 5). Eigene Außenposten anklicken → **Truppen kaufen** (Taste B): die neue Truppe erscheint neben
+  dem Gebäude und kann ab der nächsten Runde handeln (1 Kauf pro Gebäude und Runde).
+* **Ziele:** `capture` (Gebäude einnehmen/zerstören), `eliminate` (alle Gegner vernichten), `survive` (so viele Runden
+  durchhalten, wie `max_turns` angibt). Gebäude mit der Rolle `protect` darfst du nie verlieren (zerstört oder vom
+  Gegner eingenommen = Niederlage). Die linke Seitenleiste zeigt Rundenzähler, Geld und Ziele.
 * **Treibstoff** (`fuel`): Fahrzeuge verbrauchen 1 Treibstoff in jedem Zug, in dem sie sich bewegen; bei 0 stehen sie still.
   Der Supply Truck hat keinen Treibstoff-Bedarf.
 * **Heilung & Versorgung** (grün angezeigt, nur für eigene Truppen, nur wenn nötig):
@@ -90,8 +105,10 @@ Zeilen mit `#` sind Kommentare). Fehler (Tippfehler, unbekannte IDs) werden beim
 
 | Datei | Inhalt |
 |---|---|
-| `units.csv` | Truppen: HP, Willenskraft, Rüstung, Bewegung, Sicht, Treibstoff, Kosten, Attribute, bis zu 5 Waffen (`weapon1`–`weapon5`) |
-| `weapons.csv` | Waffen: Reichweite, Schaden, AP, Willens-Schaden, Cooldown, `needs_radio`, `type` (damage/heal/repair/refuel/supply) |
+| `units.csv` | Truppen: HP, Willenskraft, Rüstung, Bewegung, Sicht, Treibstoff, Kosten, Attribute, Aktionen pro Runde (`attacks`), bis zu 5 Waffen (`weapon1`–`weapon5`) mit optionaler Munition (`ammo1`–`ammo5`) |
+| `weapons.csv` | Waffen: Reichweite, Schaden, AP, Willens-Schaden, Cooldown, `needs_radio`, `type` (damage/heal/repair/refuel/supply), `ammo` |
+| `buildings.csv` | Gebäudetypen: HP, Rüstung, Einkommen, Käufe pro Runde, eigene Waffen/Aktionen |
+| `rules.csv` | Globale Regeln (`kill_reward`) |
 | `terrain.csv` | Biome: Farbe, Bewegungskosten (Infanterie/Fahrzeug, 0 = unpassierbar), Schadensmultiplikator |
 | `campaigns.csv` | Kampagnen |
 | `missions.csv` | Missionen je Kampagne: Ziel (`capture`/`eliminate`), Karte, Budget, Rundenlimit |
@@ -105,7 +122,7 @@ Eine **neue Mission** = Zeile in `missions.csv` + neue `.map`-Datei.
 ```
 [tiles]        12 Zeilen à 12 Zeichen: P Plains, F Forest, H Hills, M Mountain, R River (Symbole aus terrain.csv)
 [deploy]       Aufstellungszone als Rechteck: x0,y0,x1,y1  (mehrere Zeilen möglich)
-[buildings]    Name,x,y,Besitzer(enemy|player|neutral),Ziel(1|0)[,HP[,Rüstung]]
+[buildings]    Typ,x,y,Besitzer(enemy|player|neutral),Rolle(capture|protect|none)[,HP[,Rüstung[,Name]]]   Typ aus buildings.csv
 [triggers]     Gruppe,x0,y0,x1,y1   Auslöser-Rechteck (mehrere Zeilen pro Gruppe möglich)
 [enemies]      unit_id,x,y,Verhalten(aggressive|hold)[,Gruppe]   hold = bewegt sich nie, schießt nur;
                mit Gruppe: erscheint erst, wenn die Gruppe ausgelöst wird

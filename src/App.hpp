@@ -8,7 +8,7 @@
 
 #include "Data.hpp"
 
-constexpr float kScreenW = 1200.f;
+constexpr float kScreenW = 1360.f;
 constexpr float kScreenH = 800.f;
 
 namespace col {

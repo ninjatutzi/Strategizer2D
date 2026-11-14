@@ -13,12 +13,14 @@
 #              heilung(10) = the unit heals itself for 10 HP at the start of each of its turns
 # sprite     : image in assets/units/ (optional, default <id>.png; a fallback is drawn if missing)
 # weapon1-5  : ids from weapons.csv
-id,name,class,hp,will,armour,move,vision,fuel,cost,attributes,sprite,weapon1,weapon2,weapon3,weapon4,weapon5
-rifleman,Rifleman,infantry,50,5,0,3,5,0,10,,rifleman.png,rifle,,,,
-trooper,Trooper,infantry,75,6,0,3,6,0,20,camouflage,trooper.png,assault_rifle,grenade,,,
-light_tank,Light Tank,vehicle,100,5,4,5,4,8,40,double_attack,light_tank.png,light_cannon,light_mg,,,
-medium_tank,Medium Tank,vehicle,140,5,7,4,4,7,70,,medium_tank.png,medium_cannon,coax_mg,,,
-heavy_tank,Heavy Tank,vehicle,200,5,10,3,3,6,110,,heavy_tank.png,heavy_cannon,coax_mg,,,
-medic,Medic,infantry,50,5,0,3,5,0,15,heilung(10),medic.png,first_aid,,,,
-ambulance,Ambulance,vehicle,90,5,4,5,4,8,45,,ambulance.png,field_treatment,,,,
-truck,Supply Truck,vehicle,80,5,4,5,4,0,35,,truck.png,supply,supply_repair,supply_fuel,,
+# attacks    : attacks per turn (default 1; the attribute double_attack makes it at least 2)
+# ammo1-5    : optional per-unit override of the ammo of weapon1-5 (default = ammo column in weapons.csv)
+id,name,class,hp,will,armour,move,vision,fuel,cost,attributes,sprite,weapon1,weapon2,weapon3,weapon4,weapon5,attacks,ammo1,ammo2,ammo3,ammo4,ammo5
+rifleman,Rifleman,infantry,50,5,0,3,5,0,10,,rifleman.png,rifle,,,,,1,,,,,
+trooper,Trooper,infantry,75,6,0,3,6,0,20,camouflage,trooper.png,assault_rifle,grenade,,,,1,,,,,
+light_tank,Light Tank,vehicle,100,5,4,5,4,8,40,double_attack,light_tank.png,light_cannon,light_mg,,,,1,,,,,
+medium_tank,Medium Tank,vehicle,140,5,7,4,4,7,70,,medium_tank.png,medium_cannon,coax_mg,,,,1,,,,,
+heavy_tank,Heavy Tank,vehicle,200,5,10,3,3,6,110,,heavy_tank.png,heavy_cannon,coax_mg,,,,1,,,,,
+medic,Medic,infantry,50,5,0,3,5,0,15,heilung(10),medic.png,first_aid,,,,,1,,,,,
+ambulance,Ambulance,vehicle,90,5,4,5,4,8,45,,ambulance.png,field_treatment,,,,,1,,,,,
+truck,Supply Truck,vehicle,80,5,4,5,4,0,35,,truck.png,supply,supply_repair,heal_light,,,3,,,,,

@@ -16,6 +16,10 @@ PPPPPPPPPPPP
 [deploy]
 1,9,10,11
 
+[buildings]
+# type,x,y,owner,role[,hp[,armour[,name]]]   types: see data/buildings.csv   role: capture | protect | none
+outpost,0,10,player,none
+
 [triggers]
 # group,x0,y0,x1,y1   (touching ANY tile of a group spawns the whole group)
 ambush,8,6,10,7

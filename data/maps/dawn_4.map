@@ -1,0 +1,30 @@
+# Hold the Line - survive 8 rounds and do not lose your outpost
+[tiles]
+PPPPPPPPPPPP
+PPFFPPPPFFPP
+PPFPPPPPPFPP
+PPPPPPHPPPPP
+PPPPPPPPPPPP
+PPHPPPPPPHPP
+PPPPPFFPPPPP
+PPPPPPPPPPPP
+PPPPPPPPPPPP
+PPPPPPPPPPPP
+PPPPPPPPPPPP
+PPPPPPPPPPPP
+
+[deploy]
+2,9,9,11
+
+[buildings]
+# type,x,y,owner,role[,hp[,armour[,name]]]   role: capture | protect | none
+outpost,6,8,player,protect,120,0,Your Outpost
+
+[enemies]
+rifleman,3,2,aggressive
+rifleman,9,2,aggressive
+rifleman,5,1,aggressive
+rifleman,7,1,aggressive
+trooper,4,0,aggressive
+trooper,8,0,aggressive
+light_tank,6,0,aggressive

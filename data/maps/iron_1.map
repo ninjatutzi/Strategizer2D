@@ -16,6 +16,11 @@ PPPPPPPPPPPP
 [deploy]
 1,9,10,11
 
+[buildings]
+# type,x,y,owner,role[,hp[,armour[,name]]]   types: see data/buildings.csv   role: capture | protect | none
+outpost,11,10,player,none
+supplypost,0,10,player,none
+
 [triggers]
 reserve,3,4,8,5
 

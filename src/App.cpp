@@ -197,7 +197,7 @@ void App::drawUnitIcon(const UnitDef& def, sf::Vector2f c, float size, sf::Color
         }
     } else {
         if (onlySupport(def)) {   // ambulance (white, red cross) / supply truck (cab + crate), no turret
-            const bool amb = hasWeaponType(def, WeaponType::Heal);
+            const bool amb = hasWeaponType(def, WeaponType::Heal) && !hasWeaponType(def, WeaponType::Supply);
             const float hw = size * 0.78f, hh = size * 0.40f, cy = c.y + size * 0.02f;
             for (int i = -1; i <= 1; ++i) {
                 sf::CircleShape wheel(size * 0.075f);
@@ -440,6 +440,49 @@ void App::runDemo(const std::string& dir) {
         frame("12_attack_building");
     }
 
+    // ---- shop, supply post, capture ---------------------------------------------------------
+    goTo(std::make_unique<BattleScreen>(*this, *data.mission("iron_1"))); apply();
+    bs = dynamic_cast<BattleScreen*>(screen_.get());
+    {
+        Battle& b = bs->battle();
+        b.deploy(*data.unit("medium_tank"), 5, 10);
+        b.deploy(*data.unit("rifleman"), 6, 10);
+        b.startBattle();
+        const auto& bl = b.buildings();
+        for (int i = 0; i < static_cast<int>(bl.size()); ++i)
+            if (bl[i].def->id == "outpost") bs->selectBuilding(i);
+        bs->setHover(11, 10);
+        frame("13_building_selected");
+        bs->openShop(true);
+        frame("14_shop");
+        bs->openShop(false);
+        for (int i = 0; i < static_cast<int>(bl.size()); ++i)
+            if (bl[i].def->id == "supplypost") bs->selectBuilding(i);
+        Unit* tk = b.unitAt(5, 10);
+        Unit* rf = b.unitAt(6, 10);
+        tk->hp = 60; rf->hp = 20;
+        tk->x = 1; tk->y = 9;
+        rf->x = 1; rf->y = 11;
+        bs->toggleWeapon(1);
+        bs->setHover(1, 9);
+        frame("15_supplypost");
+    }
+    goTo(std::make_unique<BattleScreen>(*this, *data.mission("dawn_1"))); apply();
+    bs = dynamic_cast<BattleScreen*>(screen_.get());
+    {
+        Battle& b = bs->battle();
+        b.deploy(*data.unit("rifleman"), 5, 9);
+        b.deploy(*data.unit("trooper"), 6, 9);
+        b.startBattle();
+        Unit* inf = b.unitAt(6, 9);
+        inf->x = 6; inf->y = 2;
+        Unit* other = b.unitAt(5, 9);
+        other->x = 4; other->y = 2;
+        bs->select(inf->id);
+        bs->setHover(6, 1);
+        frame("16_capture");
+    }
+
     // ---- UI-level interaction check with synthetic mouse/keyboard events -----------------
     goTo(std::make_unique<BattleScreen>(*this, *data.mission("dawn_1"))); apply();
     bs = dynamic_cast<BattleScreen*>(screen_.get());
@@ -452,10 +495,10 @@ void App::runDemo(const std::string& dir) {
         sf::Event e; e.type = sf::Event::KeyPressed; e.key.code = k;
         screen_->event(e, {0, 0});
     };
-    auto tileXY = [](int tx, int ty) { return sf::Vector2f(20.f + tx * 60 + 30, 70.f + ty * 60 + 30); };
+    auto tileXY = [](int tx, int ty) { return sf::Vector2f(190.f + tx * 60 + 30, 70.f + ty * 60 + 30); };
     auto check = [&](const char* what, bool ok) { std::cout << (ok ? "UI OK   " : "UI FAIL ") << what << "\n"; };
     frame("7_ui_start");                                    // lets the screen build its click rectangles
-    click(900, 200);                                        // first unit row (Rifleman)
+    click(1100, 200);                                       // first unit row (Rifleman)
     auto p = tileXY(3, 10); click(p.x, p.y);
     p = tileXY(4, 10); click(p.x, p.y);
     check("deploy by click (2 riflemen, budget 40)", bs->battle().aliveCount(Side::Player) == 2 && bs->battle().budgetLeft() == 40);

@@ -17,8 +17,8 @@ PPPPPPPPPPPP
 2,9,9,11
 
 [buildings]
-# name,x,y,owner,objective[,hp[,armour]]   (buildings can be destroyed instead of captured)
-Outpost,6,1,enemy,1
+# type,x,y,owner,role[,hp[,armour[,name]]]   types: see data/buildings.csv   role: capture | protect | none
+outpost,6,1,enemy,capture
 
 [enemies]
 # unit_id,x,y,behavior (aggressive | hold)

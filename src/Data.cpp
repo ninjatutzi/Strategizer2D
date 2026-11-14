@@ -43,6 +43,10 @@ const UnitDef* GameData::unit(const std::string& id) const {
     for (auto& u : units_) if (u.id == id) return &u;
     return nullptr;
 }
+const BuildingDef* GameData::building(const std::string& id) const {
+    for (auto& b : buildings_) if (b.id == id) return &b;
+    return nullptr;
+}
 const Mission* GameData::mission(const std::string& id) const {
     for (auto& m : missions_) if (m.id == id) return &m;
     return nullptr;
@@ -54,6 +58,16 @@ std::vector<const Mission*> GameData::missionsOf(const std::string& campaignId) 
 }
 
 namespace {
+
+// "0", "" or "inf" mean unlimited (-1); a positive number is the magazine size
+int parseAmmo(const CsvRow& row, const std::string& col, int def) {
+    if (!row.has(col)) return def;
+    std::string v = toLower(row.str(col));
+    if (v == "inf" || v == "unlimited" || v == "0") return -1;
+    int n = row.requireInt(col);
+    if (n < 0) row.fail(col + " must be >= 0");
+    return n;
+}
 
 const std::vector<std::string> kKnownAttributes = {"radio", "double_attack", "camouflage", "heilung"};
 
@@ -105,6 +119,7 @@ void GameData::load(const std::string& rootDir) {
         w.ap = row.requireFloat("ap");
         w.willDamage = row.intOr("will_damage", 0);
         w.cooldown = row.intOr("cooldown", 0);
+        w.ammo = parseAmmo(row, "ammo", -1);
         w.needsRadio = row.intOr("needs_radio", 0) != 0;
         std::string type = toLower(row.str("type", "damage"));
         if (type == "damage") w.type = WeaponType::Damage;
@@ -136,6 +151,8 @@ void GameData::load(const std::string& rootDir) {
         u.move = row.requireInt("move");
         u.cost = row.requireInt("cost");
         u.fuel = row.intOr("fuel", 0);
+        u.attacks = row.intOr("attacks", 1);
+        if (u.attacks < 1) row.fail("attacks must be >= 1");
         if (u.fuel < 0) row.fail("fuel must be >= 0");
         u.vision = row.intOr("vision", u.cls == UnitClass::Infantry ? 5 : 4);
         if (u.vision < 1) row.fail("vision must be >= 1");
@@ -168,6 +185,7 @@ void GameData::load(const std::string& rootDir) {
             auto it = weapons.find(wid);
             if (it == weapons.end()) row.fail(col + ": unknown weapon '" + wid + "'");
             u.weapons.push_back(it->second);
+            u.weapons.back().ammo = parseAmmo(row, "ammo" + std::to_string(i), it->second.ammo);   // per-unit override
         }
         requireUnique(units_, u.id, row, "unit");
         units_.push_back(u);
@@ -184,6 +202,36 @@ void GameData::load(const std::string& rootDir) {
         requireUnique(campaigns_, c.id, row, "campaign");
         campaigns_.push_back(c);
     }
+    // ---- buildings.csv / rules.csv ---------------------------------------------------
+    buildings_.clear();
+    for (auto& row : readCsv(d + "buildings.csv")) {
+        BuildingDef b;
+        b.id = toLower(row.requireStr("id"));
+        b.name = row.requireStr("name");
+        b.hp = row.requireInt("hp");
+        b.armour = row.intOr("armour", 0);
+        b.income = row.intOr("income", 0);
+        b.recruits = row.intOr("recruits", 0);
+        b.attacks = row.intOr("attacks", 1);
+        if (b.hp < 1) row.fail("hp must be >= 1");
+        for (int i = 1; i <= cfg::MaxWeapons; ++i) {
+            std::string col = "weapon" + std::to_string(i);
+            if (!row.has(col)) continue;
+            std::string wid = toLower(row.str(col));
+            auto it = weapons.find(wid);
+            if (it == weapons.end()) row.fail(col + ": unknown weapon '" + wid + "'");
+            b.weapons.push_back(it->second);
+            b.weapons.back().ammo = parseAmmo(row, "ammo" + std::to_string(i), it->second.ammo);
+        }
+        requireUnique(buildings_, b.id, row, "building");
+        buildings_.push_back(b);
+    }
+    if (buildings_.empty()) throw std::runtime_error("buildings.csv contains no buildings");
+    killReward_ = 5;
+    if (std::filesystem::exists(d + "rules.csv"))
+        for (auto& row : readCsv(d + "rules.csv"))
+            if (toLower(row.str("key")) == "kill_reward") killReward_ = row.requireInt("value");
+
     missions_.clear();
     for (auto& row : readCsv(d + "missions.csv")) {
         Mission m;
@@ -194,10 +242,12 @@ void GameData::load(const std::string& rootDir) {
         std::string obj = toLower(row.requireStr("objective"));
         if (obj == "capture") m.objective = Objective::Capture;
         else if (obj == "eliminate") m.objective = Objective::Eliminate;
-        else row.fail("objective must be 'capture' or 'eliminate'");
+        else if (obj == "survive") m.objective = Objective::Survive;
+        else row.fail("objective must be 'capture', 'eliminate' or 'survive'");
         m.mapFile = row.requireStr("map");
         m.budget = row.requireInt("budget");
         m.maxTurns = row.intOr("max_turns", 0);
+        if (m.objective == Objective::Survive && m.maxTurns <= 0) row.fail("a 'survive' mission needs max_turns > 0");
         bool known = std::any_of(campaigns_.begin(), campaigns_.end(),
                                  [&](const Campaign& c) { return c.id == m.campaign; });
         if (!known) row.fail("unknown campaign '" + m.campaign + "'");

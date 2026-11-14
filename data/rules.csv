@@ -1,0 +1,4 @@
+# Global rules
+# kill_reward : money the player gets for every destroyed enemy unit
+key,value
+kill_reward,5
