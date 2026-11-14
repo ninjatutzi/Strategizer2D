@@ -1,0 +1,35 @@
+# Outpost Alpha - tiles: P plains, F forest, H hills, M mountain, R river, S snow, C concrete
+[tiles]
+CCCRRCRRRRCRRCCC
+CCCRRCCCCCCRRCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+SSSSSCCCCCCSSSSS
+SSSSFSSSSSSSSSRR
+SSSFFFSSSSSSSSSR
+SSFFSSSSSSSSSSSS
+SSSSSSSSSSFSSRRR
+RRSSSRRRSSSRRRSR
+RSSSSSRRRRRSRRSR
+SSSFSSSSSSRSSRSS
+SSSFFFSSSSSSSSSS
+SSSSSSSSSSSSSSSS
+
+[deploy]
+2,9,9,11
+
+[buildings]
+# type,x,y,owner,role[,hp[,armour[,name]]]   types: see data/buildings.csv   role: capture | protect | none
+outpost,5,1,enemy,capture
+
+[enemies]
+# unit_id,x,y,behavior (aggressive | hold)
+trooper,6,7,hold
+trooper,11,7,hold
+light_tank,13,3,hold
+rifleman,3,3,aggressive
+rifleman,9,3,aggressive
+
+# 16,16
