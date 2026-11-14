@@ -3,7 +3,12 @@
 #             in both cases wiping out all enemies wins the mission
 # budget    : points the player can spend while deploying
 # max_turns : 0 = unlimited
+
+
 id,campaign,name,description,objective,map,budget,max_turns
+
+arctic_1,arctic,Entrance located,"The entrance has been located, dont take to long or they will catch on."capture,arctic_1.map,80,15 
+
 dawn_1,dawn,Outpost Alpha,"Nimm den feindlichen Außenposten ein (nur Infanterie) oder zerstöre ihn.",capture,dawn_1.map,60,12
 dawn_2,dawn,River Crossing,"Überquere den Fluss an den Furten und vernichte die Verteidiger.",eliminate,dawn_2.map,90,0
 dawn_3,dawn,Hill 42,"Erobere oder zerstöre den Hügel und den Bunker (Rüstung 5!). Vorsicht vor dem leichten Panzer.",capture,dawn_3.map,130,14
