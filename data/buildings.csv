@@ -4,7 +4,10 @@
 # income   : money per round for the player while he owns the building (paid when he ends his turn)
 # recruits : units the owner may buy here per turn (opens the shop). 0 = cannot recruit
 # attacks  : uses of the building's own weapons per turn (weapon1-5 from weapons.csv, usually heal/repair/supply)
+
+
 id,name,hp,armour,income,recruits,attacks,weapon1,weapon2,weapon3,weapon4,weapon5
+
 outpost,Outpost,100,0,10,1,1,,,,,
 supplypost,Supply Post,80,0,5,0,3,heal_post,repair_post,supply_post,,
 bunker,Bunker,200,5,5,0,1,,,,,
