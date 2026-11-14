@@ -80,6 +80,7 @@ ihre Reichweite angezeigt (orange). Beim Überfahren eines Ziels siehst du den S
   `heal` = Infanterie heilen (Medic, Ambulance), `repair` = Fahrzeuge reparieren, `refuel` = Treibstoff auffüllen,
   `supply` = beides (Supply Truck). Das Attribut `heilung(10)` heilt die Truppe selbst um 10 HP zu Beginn jedes eigenen
   Zuges (Medic; die Ambulance hat es nicht).
+* **Aktions-Icons** unten rechts im Feld deiner Truppen (nur in deinem Zug): blauer Pfeil = kann sich noch bewegen, orangenes Fadenkreuz = kann noch angreifen, grünes Plus = kann noch heilen/versorgen, rotes durchgestrichenes **M** = Munition leer, rotes durchgestrichenes **F** = Treibstoff leer. Ist eine Aktion verbraucht, verschwindet ihr Icon.
 * **Status-Icons** oben rechts im Feld einer Truppe: ! Moral gebrochen, F Treibstoff niedrig/leer, grünes + Heiler/Selbstheilung,
   T Tarnung, R Funk, 2 Doppelangriff.
 * **Biome** verändern Bewegungskosten und erhaltenen Schaden (Plains = Standard).
