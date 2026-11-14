@@ -193,6 +193,15 @@ void App::applyLetterbox() {
     window.setView(v);
 }
 
+#ifndef STRATEGIZER_VERSION
+#define STRATEGIZER_VERSION "dev"
+#endif
+
+// Small semi-transparent version label, always visible in the top-left corner.
+void App::drawVersion() {
+    text(std::string("v") + STRATEGIZER_VERSION, 5, 1, 11, sf::Color(255, 255, 255, 110));
+}
+
 void App::screenshot(const std::string& path) {
     sf::Texture t;
     t.create(window.getSize().x, window.getSize().y);
@@ -231,6 +240,7 @@ void App::run(const std::string& shotDir) {
         rect({0, 0, kScreenW, kScreenH}, col::Bg);
         sf::Vector2i px = sf::Mouse::getPosition(window);
         screen_->draw(mapMouse(px.x, px.y));
+        drawVersion();
         window.display();
     }
 }
@@ -246,6 +256,7 @@ void App::runDemo(const std::string& dir) {
             window.clear(sf::Color::Black);
             rect({0, 0, kScreenW, kScreenH}, col::Bg);
             screen_->draw({-1, -1});
+            drawVersion();
             window.display();
         }
         screenshot(dir + "/" + name + ".png");
