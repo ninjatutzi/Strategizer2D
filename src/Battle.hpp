@@ -76,8 +76,8 @@ public:
     Battle(const GameData& data, const Mission& mission);
 
     // ---- map ---------------------------------------------------------------------
-    int width() const { return cfg::MapSize; }
-    int height() const { return cfg::MapSize; }
+    int width() const { return width_; }
+    int height() const { return height_; }
     bool inBounds(int x, int y) const { return x >= 0 && y >= 0 && x < width() && y < height(); }
     const Terrain& terrainAt(int x, int y) const { return *tiles_[y * width() + x]; }
     const std::vector<Building>& buildings() const { return buildings_; }
@@ -193,6 +193,7 @@ private:
     std::deque<int> aiQueue_;
     Phase phase_ = Phase::Deploy;
     int round_ = 1;
+    int width_ = 0, height_ = 0;   // taken from the map file
     int nextId_ = 1;
     int money_ = 0;
     int kills_ = 0;

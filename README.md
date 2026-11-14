@@ -1,7 +1,7 @@
 # Strategizer2D
 
 Rundenbasiertes 2D-Strategiespiel in C++17 (SFML 2), inspiriert von *Noobs in Combat*.
-Du spielst auf einem 12×12-Feld gegen eine KI, die ihre Truppen schon platziert hat. Du stellst deine
+Du spielst auf einem Spielfeld (z. B. 12×12) gegen eine KI, die ihre Truppen schon platziert hat. Du stellst deine
 Truppen im Rahmen eines Budgets selbst auf und kämpfst dann Runde für Runde.
 
 ## Bauen & starten
@@ -113,7 +113,7 @@ Zeilen mit `#` sind Kommentare). Fehler (Tippfehler, unbekannte IDs) werden beim
 | `terrain.csv` | Biome: Farbe, Bewegungskosten (Infanterie/Fahrzeug, 0 = unpassierbar), Schadensmultiplikator |
 | `campaigns.csv` | Kampagnen |
 | `missions.csv` | Missionen je Kampagne: Ziel (`capture`/`eliminate`), Karte, Budget, Rundenlimit |
-| `maps/*.map` | Karten (immer 12×12, Größe in `src/Config.hpp`) |
+| `maps/*.map` | Karten – beliebige Größe von 4×4 bis 32×32 (Rechteck, die Größe ergibt sich aus den `[tiles]`-Zeilen; das Spielfeld skaliert automatisch) |
 
 Eine **neue Truppe** = eine neue Zeile in `units.csv` (Waffen aus `weapons.csv` referenzieren).
 Eine **neue Mission** = Zeile in `missions.csv` + neue `.map`-Datei.
@@ -121,7 +121,8 @@ Eine **neue Mission** = Zeile in `missions.csv` + neue `.map`-Datei.
 ### Kartenformat
 
 ```
-[tiles]        12 Zeilen à 12 Zeichen: P Plains, F Forest, H Hills, M Mountain, R River (Symbole aus terrain.csv)
+[tiles]        Zeilen mit je einem Zeichen pro Feld (alle Zeilen gleich lang), z. B. P Plains, F Forest, H Hills,
+               M Mountain, R River – die Symbole stammen aus terrain.csv, jede Karte nutzt nur die, die sie braucht
 [deploy]       Aufstellungszone als Rechteck: x0,y0,x1,y1  (mehrere Zeilen möglich)
 [buildings]    Typ,x,y,Besitzer(enemy|player|neutral),Rolle(capture|protect|none)[,HP[,Rüstung[,Name]]]   Typ aus buildings.csv
 [triggers]     Gruppe,x0,y0,x1,y1   Auslöser-Rechteck (mehrere Zeilen pro Gruppe möglich)

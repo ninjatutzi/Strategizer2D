@@ -67,6 +67,8 @@ private:
     Building* selBuilding() { return battle_.buildingByIndex(selectedBuilding_); }
     const Building* selBuildingC() const { return selectedBuilding_ >= 0 ? &battle_.buildings()[selectedBuilding_] : nullptr; }
 
+    float tile_ = 60.f;          // size of one map tile in pixels (depends on the map size)
+    float bx_ = 190.f, by_ = 70.f;   // top-left corner of the board
     const Mission& mission_;
     Battle battle_;
     const UnitDef* deployDef_ = nullptr;

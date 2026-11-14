@@ -32,5 +32,6 @@ private:
     sf::FloatRect cardRect(size_t i) const;
     const Campaign& campaign_;
     std::vector<const Mission*> missions_;
+    std::string error_;   // shown in red when a mission cannot start (e.g. broken map file)
     Button back_;
 };
