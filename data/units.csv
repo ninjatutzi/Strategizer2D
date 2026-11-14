@@ -15,7 +15,12 @@
 # weapon1-5  : ids from weapons.csv
 # attacks    : attacks per turn (default 1; the attribute double_attack makes it at least 2)
 # ammo1-5    : optional per-unit override of the ammo of weapon1-5 (default = ammo column in weapons.csv)
+
+
 id,name,class,hp,will,armour,move,vision,fuel,cost,attributes,sprite,weapon1,weapon2,weapon3,weapon4,weapon5,attacks,ammo1,ammo2,ammo3,ammo4,ammo5
+
+o_algo,Mutt,infantry,60,4,0,2,3,0,45,,o_algo.png,keys,,,,,1,,,,,
+
 rifleman,Rifleman,infantry,50,5,0,3,5,0,10,,rifleman.png,rifle,,,,,1,,,,,
 trooper,Trooper,infantry,75,6,0,3,6,0,20,camouflage,trooper.png,assault_rifle,grenade,,,,1,,,,,
 light_tank,Light Tank,vehicle,100,5,4,5,4,8,40,double_attack,light_tank.png,light_cannon,light_mg,,,,1,,,,,
