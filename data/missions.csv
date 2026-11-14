@@ -7,7 +7,7 @@
 
 id,campaign,name,description,objective,map,budget,max_turns
 
-arctic_1,arctic,Entrance located,"The entrance has been located, dont take to long or they will catch on."capture,arctic_1.map,80,15 
+arctic_1,arctic,Entrance located,"The entrance has been located, dont take to long or they will catch on.",capture,arctic_1.map,80,15
 
 dawn_1,dawn,Outpost Alpha,"Nimm den feindlichen Außenposten ein (nur Infanterie) oder zerstöre ihn.",capture,dawn_1.map,60,12
 dawn_2,dawn,River Crossing,"Überquere den Fluss an den Furten und vernichte die Verteidiger.",eliminate,dawn_2.map,90,0

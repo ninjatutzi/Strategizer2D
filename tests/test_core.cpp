@@ -491,6 +491,30 @@ static void testCsv() {
     std::remove(path.c_str());
 }
 
+static void testCsvErrors() {
+    std::string base = std::string(std::getenv("TMPDIR") ? std::getenv("TMPDIR") : "/tmp");
+    auto write = [&](const std::string& name, const std::string& body) {
+        std::string p = base + "/" + name;
+        FILE* f = fopen(p.c_str(), "w");
+        fputs(body.c_str(), f);
+        fclose(f);
+        return p;
+    };
+    // missing comma after a closing quote
+    std::string p1 = write("strat_q.csv", "id,desc,kind\na,\"text\"capture,x\n");
+    bool threw = false;
+    try { readCsv(p1); } catch (const std::exception& e) { threw = std::string(e.what()).find("Anf") != std::string::npos; }
+    CHECK(threw);
+    // too few cells: the error points at the column mismatch
+    std::string p2 = write("strat_c.csv", "id,a,b,c\nx,1,2\n");
+    auto rows = readCsv(p2);
+    threw = false;
+    try { rows[0].requireInt("c"); } catch (const std::exception& e) { threw = std::string(e.what()).find("3 Spalten") != std::string::npos; }
+    CHECK(threw);
+    std::remove(p1.c_str());
+    std::remove(p2.c_str());
+}
+
 int main(int argc, char** argv) {
     std::string root = argc > 1 ? argv[1] : findGameRoot(argv[0]);
     GameData d;
@@ -498,6 +522,7 @@ int main(int argc, char** argv) {
         d.load(root);
         testDamageFormula();
         testCsv();
+        testCsvErrors();
         testData(d);
         testRules(d);
         testWillAndCooldown(d);

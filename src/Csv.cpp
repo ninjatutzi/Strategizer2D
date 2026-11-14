@@ -32,7 +32,7 @@ std::vector<std::string> split(const std::string& s, char delim) {
 
 namespace {
 
-std::vector<std::string> splitCsvLine(const std::string& line, char delim) {
+std::vector<std::string> splitCsvLine(const std::string& line, char delim, bool* badQuote = nullptr) {
     std::vector<std::string> out;
     std::string cur;
     bool quoted = false;
@@ -41,7 +41,12 @@ std::vector<std::string> splitCsvLine(const std::string& line, char delim) {
         if (quoted) {
             if (c == '"') {
                 if (i + 1 < line.size() && line[i + 1] == '"') { cur += '"'; ++i; }
-                else quoted = false;
+                else {
+                    quoted = false;
+                    // after the closing quote only a delimiter (or the end of the line) may follow
+                    if (badQuote && i + 1 < line.size() && line[i + 1] != delim && !std::isspace(static_cast<unsigned char>(line[i + 1])))
+                        *badQuote = true;
+                }
             } else cur += c;
         } else if (c == '"') quoted = true;
         else if (c == delim) { out.push_back(trim(cur)); cur.clear(); }
@@ -54,7 +59,11 @@ std::vector<std::string> splitCsvLine(const std::string& line, char delim) {
 } // namespace
 
 void CsvRow::fail(const std::string& msg) const {
-    throw std::runtime_error(file + ":" + std::to_string(line) + ": " + msg);
+    std::string hint;
+    if (cells != headerCells && headerCells > 0)
+        hint = "  [HINWEIS: diese Zeile hat " + std::to_string(cells) + " Spalten, die Kopfzeile " + std::to_string(headerCells) +
+               " - fehlt oder steht ein Komma zu viel? Alle Werte verschieben sich dann]";
+    throw std::runtime_error(file + ":" + std::to_string(line) + ": " + msg + hint);
 }
 
 bool CsvRow::has(const std::string& col) const {
@@ -121,13 +130,17 @@ std::vector<CsvRow> readCsv(const std::string& path) {
             for (auto& h : splitCsvLine(t, delim)) header.push_back(toLower(h));
             continue;
         }
-        auto cells = splitCsvLine(t, delim);
+        bool badQuote = false;
+        auto cells = splitCsvLine(t, delim, &badQuote);
         // Rows consisting only of delimiters (empty Excel lines) are skipped
         if (std::all_of(cells.begin(), cells.end(), [](const std::string& c) { return c.empty(); }))
             continue;
         CsvRow row;
         row.file = path;
         row.line = lineNo;
+        row.cells = static_cast<int>(cells.size());
+        row.headerCells = static_cast<int>(header.size());
+        if (badQuote) row.fail("nach dem schließenden Anführungszeichen (\") muss ein Komma folgen");
         if (cells.size() > header.size()) {
             bool extraEmpty = std::all_of(cells.begin() + header.size(), cells.end(),
                                           [](const std::string& c) { return c.empty(); });

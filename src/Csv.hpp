@@ -13,6 +13,7 @@
 struct CsvRow {
     std::string file;
     int line = 0;
+    int cells = 0, headerCells = 0;   // used for a hint when a row has a different number of columns than the header
     std::map<std::string, std::string> fields;
 
     bool has(const std::string& col) const;
