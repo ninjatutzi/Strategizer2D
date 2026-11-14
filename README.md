@@ -56,7 +56,17 @@ ihre Reichweite angezeigt (orange). Beim Überfahren eines Ziels siehst du den S
 * **Willenskraft:** Treffer senken sie (`will_damage`). Bei 0 kann sich die Truppe in ihrem nächsten Zug
   nicht bewegen. Nach diesem Zug ist sie wieder auf dem Standardwert.
 * **Waffen-Abklingzeit** (`cooldown`): so viele eigene Züge ist die Waffe nach dem Schuss gesperrt.
-* **Gebäude** (★ = Missionsziel) können nur **Infanterie** einnehmen: auf das Feld ziehen genügt.
+* **Gebäude** (★ = Missionsziel) kann nur **Infanterie** einnehmen (auf das Feld ziehen genügt) – man kann sie aber auch
+  **zerstören**: jede Waffe kann Gebäude beschießen (Waffe wählen, Gebäude anklicken). Ein zerstörtes Gebäude zählt als
+  erledigtes Ziel, so ist ein Sieg auch ohne Infanterie möglich. HP/Rüstung pro Gebäude stehen in der Karte.
+* **Treibstoff** (`fuel`): Fahrzeuge verbrauchen 1 Treibstoff in jedem Zug, in dem sie sich bewegen; bei 0 stehen sie still.
+  Der Supply Truck hat keinen Treibstoff-Bedarf.
+* **Heilung & Versorgung** (grün angezeigt, nur für eigene Truppen, nur wenn nötig):
+  `heal` = Infanterie heilen (Medic, Ambulance), `repair` = Fahrzeuge reparieren, `refuel` = Treibstoff auffüllen,
+  `supply` = beides (Supply Truck). Das Attribut `heilung(10)` heilt die Truppe selbst um 10 HP zu Beginn jedes eigenen
+  Zuges (Medic; die Ambulance hat es nicht).
+* **Status-Icons** oben rechts im Feld einer Truppe: ! Moral gebrochen, F Treibstoff niedrig/leer, grünes + Heiler/Selbstheilung,
+  T Tarnung, R Funk, 2 Doppelangriff.
 * **Biome** verändern Bewegungskosten und erhaltenen Schaden (Plains = Standard).
 * **Tarnung** (`camouflage`): Truppe ist nur sichtbar, wenn eine gegnerische Truppe höchstens 2 Felder entfernt ist (und in deren Sicht).
 * **Funk** (`radio`): Waffen mit `needs_radio=1` (z. B. spätere Artillerie) funktionieren nur, solange eine
@@ -80,8 +90,8 @@ Zeilen mit `#` sind Kommentare). Fehler (Tippfehler, unbekannte IDs) werden beim
 
 | Datei | Inhalt |
 |---|---|
-| `units.csv` | Truppen: HP, Willenskraft, Rüstung, Bewegung, Sicht, Kosten, Attribute, bis zu 5 Waffen (`weapon1`–`weapon5`) |
-| `weapons.csv` | Waffen: Reichweite, Schaden, AP, Willens-Schaden, Cooldown, `needs_radio` |
+| `units.csv` | Truppen: HP, Willenskraft, Rüstung, Bewegung, Sicht, Treibstoff, Kosten, Attribute, bis zu 5 Waffen (`weapon1`–`weapon5`) |
+| `weapons.csv` | Waffen: Reichweite, Schaden, AP, Willens-Schaden, Cooldown, `needs_radio`, `type` (damage/heal/repair/refuel/supply) |
 | `terrain.csv` | Biome: Farbe, Bewegungskosten (Infanterie/Fahrzeug, 0 = unpassierbar), Schadensmultiplikator |
 | `campaigns.csv` | Kampagnen |
 | `missions.csv` | Missionen je Kampagne: Ziel (`capture`/`eliminate`), Karte, Budget, Rundenlimit |
@@ -95,7 +105,7 @@ Eine **neue Mission** = Zeile in `missions.csv` + neue `.map`-Datei.
 ```
 [tiles]        12 Zeilen à 12 Zeichen: P Plains, F Forest, H Hills, M Mountain, R River (Symbole aus terrain.csv)
 [deploy]       Aufstellungszone als Rechteck: x0,y0,x1,y1  (mehrere Zeilen möglich)
-[buildings]    Name,x,y,Besitzer(enemy|player|neutral),Ziel(1|0)
+[buildings]    Name,x,y,Besitzer(enemy|player|neutral),Ziel(1|0)[,HP[,Rüstung]]
 [triggers]     Gruppe,x0,y0,x1,y1   Auslöser-Rechteck (mehrere Zeilen pro Gruppe möglich)
 [enemies]      unit_id,x,y,Verhalten(aggressive|hold)[,Gruppe]   hold = bewegt sich nie, schießt nur;
                mit Gruppe: erscheint erst, wenn die Gruppe ausgelöst wird
@@ -104,9 +114,9 @@ Koordinaten: x = Spalte, y = Zeile, jeweils ab 0 (oben links).
 
 ## Bilder
 
-Truppenbilder liegen in `assets/units/` (PNG, transparent, quadratisch, z. B. 128×128). Dateiname = Spalte
+Truppenbilder liegen in `assets/units/` (PNG mit transparentem Hintergrund, quadratisch, empfohlen 128×128 oder 256×256; werden automatisch auf Feldgröße skaliert). Dateiname = Spalte
 `sprite` in `units.csv` (Standard `<id>.png`, also `rifleman.png`, `trooper.png`, `light_tank.png`,
-`medium_tank.png`, `heavy_tank.png`). Fehlt ein Bild, wird eine einfache Ersatzgrafik gezeichnet –
+`medium_tank.png`, `heavy_tank.png`, `medic.png`, `ambulance.png`, `truck.png`). Fehlt ein Bild, wird eine einfache Ersatzgrafik gezeichnet –
 das Spiel ist also auch ohne Bilder spielbar. Schrift: DejaVu Sans (freie Lizenz, `assets/fonts/`).
 
 ## Projektstruktur

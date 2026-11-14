@@ -17,8 +17,8 @@ PPPPPPPPPPPP
 1,9,10,11
 
 [buildings]
-Hill 42,2,2,enemy,1
-Bunker,9,2,enemy,1
+Hill 42,2,2,enemy,1,150
+Bunker,9,2,enemy,1,200,5
 
 [triggers]
 tank,3,5,8,6

@@ -19,6 +19,13 @@ struct Terrain {
     int moveCost(UnitClass c) const { return c == UnitClass::Infantry ? moveCostInfantry : moveCostVehicle; }
 };
 
+// damage  : normal attack (default)
+// heal    : restores `damage` HP of friendly INFANTRY
+// repair  : restores `damage` HP of friendly VEHICLES
+// refuel  : refills the fuel of friendly vehicles to their default
+// supply  : repair + refuel in one
+enum class WeaponType { Damage, Heal, Repair, Refuel, Supply };
+
 struct WeaponDef {
     std::string id, name;
     int range = 1;
@@ -27,17 +34,22 @@ struct WeaponDef {
     int willDamage = 0;    // damage to the target's willpower
     int cooldown = 0;      // turns the weapon is unusable after firing
     bool needsRadio = false;
+    WeaponType type = WeaponType::Damage;
+    bool isSupport() const { return type != WeaponType::Damage; }
 };
 
 struct UnitDef {
     std::string id, name, sprite;
     UnitClass cls = UnitClass::Infantry;
     int hp = 1, will = 5, armour = 0, move = 1, cost = 0;
+    int fuel = 0;                     // vehicles: max fuel, 1 is used per turn in which the unit moves (0 = no fuel system)
     int vision = 4;                   // fog of war: tiles (Manhattan) this unit can see
-    std::vector<std::string> attributes;
+    std::vector<std::string> attributes;   // base names, e.g. "heilung"
+    std::map<std::string, int> attrValues; // optional value, e.g. heilung(10) -> 10
     std::vector<WeaponDef> weapons;   // up to cfg::MaxWeapons
 
     bool has(const std::string& attr) const;
+    int attrValue(const std::string& attr, int def = 0) const;
     bool isInfantry() const { return cls == UnitClass::Infantry; }
     int maxAttacks() const { return has("double_attack") ? 2 : 1; }
     std::string abbrev() const;       // short label for units without a sprite

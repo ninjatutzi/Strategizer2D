@@ -5,14 +5,25 @@
 # will_damage : willpower removed from the target per hit
 # cooldown    : turns the weapon cannot be used after firing (0 = none)
 # needs_radio : 1 = can only be used while a friendly unit with the attribute "radio" is alive
-id,name,range,damage,ap,will_damage,cooldown,needs_radio
-rifle,Rifle,3,15,1,1,0,0
-assault_rifle,Assault Rifle,3,20,1,1,0,0
-grenade,Grenade,2,30,2,2,2,0
-light_cannon,Light Cannon,3,25,2,1,0,0
-light_mg,Machine Gun,2,12,1,2,0,0
-medium_cannon,Medium Cannon,4,45,3,2,0,0
-heavy_cannon,Heavy Cannon,4,70,4,3,1,0
-coax_mg,Coaxial MG,2,12,1,2,0,0
+# type        : damage (default) | heal | repair | refuel | supply
+#               heal   = restores `damage` HP of friendly INFANTRY (shown green)
+#               repair = restores `damage` HP of friendly VEHICLES
+#               refuel = refills a friendly vehicle's fuel to its default
+#               supply = repair + refuel
+#               (support weapons only work on friendly units that need them; ap / will_damage are ignored)
+id,name,range,damage,ap,will_damage,cooldown,needs_radio,type
+rifle,Rifle,3,15,1,1,0,0,damage
+assault_rifle,Assault Rifle,3,20,1,1,0,0,damage
+grenade,Grenade,2,30,2,2,2,0,damage
+light_cannon,Light Cannon,3,25,2,1,0,0,damage
+light_mg,Machine Gun,2,12,1,2,0,0,damage
+medium_cannon,Medium Cannon,4,45,3,2,0,0,damage
+heavy_cannon,Heavy Cannon,4,70,4,3,1,0,damage
+coax_mg,Coaxial MG,2,12,1,2,0,0,damage
 # Example for later (artillery needs a radio operator):
 # mortar,Mortar,6,50,2,3,1,1
+first_aid,First Aid,1,25,0,0,0,0,heal
+field_treatment,Field Treatment,2,30,0,0,0,0,heal
+supply,Supply,1,40,0,0,0,0,supply
+supply_repair,Supply: Repair,1,40,0,0,0,0,repair
+supply_fuel,Supply: Fuel,1,0,0,0,0,0,refuel

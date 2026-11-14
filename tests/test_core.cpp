@@ -185,6 +185,84 @@ static void testFogAndTriggers(GameData& d) {
     CHECK(sawSpawn);
 }
 
+static void testSupportAndBuildings(GameData& d) {
+    // buildings can be destroyed -> capture mission won without infantry
+    {
+        Battle b(d, *d.mission("dawn_1"));
+        b.deploy(*d.unit("light_tank"), 6, 9);
+        b.startBattle();
+        Unit* tank = b.unitAt(6, 9);
+        tank->x = 6; tank->y = 2;
+        Building* post = b.buildingAt(6, 1);
+        CHECK(post && post->hp == 100 && !post->destroyed);
+        CHECK(b.canAttackBuilding(*tank, 0, *post));
+        CHECK(b.attackBuilding(*tank, 0, *post));
+        CHECK(post->hp == 75);
+        b.attackBuilding(*tank, 0, *post);
+        CHECK(!b.attackBuilding(*tank, 0, *post));   // only 2 attacks per turn
+        tank->attacksLeft = 2;
+        b.attackBuilding(*tank, 0, *post);
+        tank->attacksLeft = 2;
+        CHECK(b.attackBuilding(*tank, 0, *post));
+        CHECK(post->destroyed);
+        CHECK(b.phase() == Phase::Won);
+    }
+    // healing, repairing, refuelling, fuel use, self healing
+    {
+        Battle b(d, *d.mission("iron_2"));
+        b.deploy(*d.unit("medic"), 5, 10);
+        b.deploy(*d.unit("rifleman"), 5, 9);
+        b.deploy(*d.unit("light_tank"), 7, 10);
+        b.deploy(*d.unit("truck"), 8, 10);
+        b.deploy(*d.unit("ambulance"), 3, 10);
+        b.startBattle();
+        Unit* medic = b.unitAt(5, 10);
+        Unit* rifle = b.unitAt(5, 9);
+        Unit* tank = b.unitAt(7, 10);
+        Unit* truck = b.unitAt(8, 10);
+        Unit* amb = b.unitAt(3, 10);
+        CHECK(medic->def->attrValue("heilung") == 10);
+        CHECK(truck->def->fuel == 0 && tank->fuel == tank->def->fuel);
+        CHECK(!b.canAttack(*medic, 0, *rifle));        // full HP: nothing to heal
+        rifle->hp = 20;
+        CHECK(b.canAttack(*medic, 0, *rifle));
+        CHECK(!b.canAttack(*medic, 0, *tank));         // medics cannot heal vehicles
+        CHECK(b.attack(*medic, 0, *rifle));
+        CHECK(rifle->hp == 45);                        // +25
+        CHECK(!b.canAttack(*amb, 0, *medic));          // out of range (2) and nothing to heal
+        // fuel: a move costs 1; at 0 the vehicle stays put
+        CHECK(b.moveUnit(*tank, 7, 8));
+        CHECK(tank->fuel == tank->def->fuel - 1);
+        tank->hp = 50;
+        tank->fuel = 0;
+        CHECK(!b.canMove(*tank));
+        CHECK(!b.canAttack(*medic, 0, *tank));
+        truck->x = 7; truck->y = 9;
+        CHECK(b.canAttack(*truck, 1, *tank));          // repair only
+        CHECK(b.attack(*truck, 1, *tank));
+        CHECK(tank->hp == 90 && tank->fuel == 0);
+        truck->attacksLeft = 1;
+        CHECK(b.canAttack(*truck, 2, *tank));          // refuel only
+        CHECK(b.attack(*truck, 2, *tank));
+        CHECK(tank->fuel == tank->def->fuel);
+        truck->attacksLeft = 1;
+        CHECK(!b.canAttack(*truck, 2, *tank));         // already full
+        tank->hp = 50; tank->fuel = 1;
+        CHECK(b.canAttack(*truck, 0, *tank));          // supply = repair + refuel in one attack
+        CHECK(b.attack(*truck, 0, *tank));
+        CHECK(tank->hp == 90 && tank->fuel == tank->def->fuel);
+        CHECK(!b.canAttack(*truck, 0, *truck));        // cannot target itself
+        CHECK(!b.canAttack(*amb, 0, *amb));
+        // self heal: medic +10 per round, ambulance none
+        medic->hp = 30;
+        amb->hp = 30;
+        b.endPlayerTurn();
+        while (b.phase() == Phase::EnemyTurn) b.stepAI();
+        CHECK(medic->hp == 40);
+        CHECK(amb->hp == 30);
+    }
+}
+
 // Random-ish games: random player, built-in AI. Must terminate without crashing.
 static void testSimulation(GameData& d) {
     std::mt19937 rng(1234);
@@ -258,6 +336,7 @@ int main(int argc, char** argv) {
         testWillAndCooldown(d);
         testCaptureCamoRadio(d);
         testFogAndTriggers(d);
+        testSupportAndBuildings(d);
         testSimulation(d);
     } catch (const std::exception& e) {
         std::cerr << "EXCEPTION: " << e.what() << "\n";

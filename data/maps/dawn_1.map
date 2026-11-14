@@ -17,7 +17,7 @@ PPPPPPPPPPPP
 2,9,9,11
 
 [buildings]
-# name,x,y,owner,objective
+# name,x,y,owner,objective[,hp[,armour]]   (buildings can be destroyed instead of captured)
 Outpost,6,1,enemy,1
 
 [enemies]
