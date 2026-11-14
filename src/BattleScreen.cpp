@@ -13,8 +13,8 @@ constexpr float kSideX = 10.f, kSideW = 170.f;
 constexpr float kBoardX = 190.f, kBoardY = 70.f;
 constexpr float kPanelX = 930.f, kPanelY = 70.f, kPanelW = 410.f, kPanelH = 720.f;
 constexpr float kInnerX = kPanelX + 20.f, kInnerW = kPanelW - 40.f;
-constexpr int kDeployRows = 6;
-constexpr float kDeployRowH = 62.f;
+constexpr int kDeployRows = 8;   // all units fit without scrolling (more units: mouse wheel)
+constexpr float kDeployRowH = 50.f;
 
 sf::Color shade(sf::Color c, float f) {
     auto ch = [&](sf::Uint8 v) { return static_cast<sf::Uint8>(std::clamp(v * f, 0.f, 255.f)); };
@@ -1028,16 +1028,16 @@ void BattleScreen::drawDeployPanel(sf::Vector2f mouse) {
         bool isSel = deployDef_ == &d;
         sf::Color bg = isSel ? sf::Color(70, 82, 112) : r.contains(mouse) && affordable ? sf::Color(60, 68, 88) : col::PanelLight;
         app.rect(r, bg, isSel ? col::Accent : sf::Color(80, 88, 105), isSel ? 2.f : 1.f);
-        app.drawUnitIcon(d, {r.left + 30, r.top + r.height / 2}, 46, col::Player, affordable ? 1.f : 0.4f);
+        app.drawUnitIcon(d, {r.left + 26, r.top + r.height / 2}, 38, col::Player, affordable ? 1.f : 0.4f);
         sf::Color tc = affordable ? col::Text : col::TextDim;
-        app.text(d.name, r.left + 62, r.top + 4, 17, tc, true);
+        app.text(d.name, r.left + 54, r.top + 1, 16, tc, true);
         std::string cost = std::to_string(d.cost);
-        app.text(cost, r.left + r.width - 12 - app.textWidth(cost, 18, true), r.top + 4, 18, affordable ? col::Accent : col::Enemy, true);
+        app.text(cost, r.left + r.width - 12 - app.textWidth(cost, 18, true), r.top + 2, 18, affordable ? col::Accent : col::Enemy, true);
         app.text("HP " + std::to_string(d.hp) + "  Moral " + std::to_string(d.will) + "  Rüst. " + std::to_string(d.armour) +
-                     "  Bew. " + std::to_string(d.move) + "  Sicht " + std::to_string(d.vision), r.left + 62, r.top + 26, 12, col::TextDim);
+                     "  Bew. " + std::to_string(d.move) + "  Sicht " + std::to_string(d.vision), r.left + 54, r.top + 19, 12, col::TextDim);
         std::string extra = attrList(d);
         if (d.fuel > 0) extra += std::string(extra.empty() ? "" : ", ") + "Treibstoff " + std::to_string(d.fuel);
-        if (!extra.empty()) app.text(extra, r.left + 62, r.top + 40, 12, col::Accent);
+        if (!extra.empty()) app.text(extra, r.left + 54, r.top + 32, 12, col::Accent);
     }
     if (units.size() > kDeployRows) {
         std::string hint = "Mausrad: Liste scrollen (" + std::to_string(first + 1) + "-" +
