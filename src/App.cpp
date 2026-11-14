@@ -148,10 +148,10 @@ void App::drawUnitIcon(const UnitDef& def, sf::Vector2f c, float size, sf::Color
     if (def.isInfantry()) {
         const bool helmet = def.id == "trooper";   // better infantry wears a helmet
         if (helmet) {
-            sf::CircleShape dome(size * 0.23f);
-            dome.setOrigin(size * 0.23f, size * 0.23f);
-            dome.setPosition(c.x, c.y - size * 0.17f);
-            dome.setFillColor(a(sf::Color(78, 94, 62)));
+            sf::CircleShape dome(size * 0.27f);
+            dome.setOrigin(size * 0.27f, size * 0.27f);
+            dome.setPosition(c.x, c.y - size * 0.15f);
+            dome.setFillColor(a(sf::Color(96, 120, 70)));
             dome.setOutlineColor(a(sf::Color(30, 40, 25)));
             dome.setOutlineThickness(1.f);
             window.draw(dome);
@@ -162,42 +162,64 @@ void App::drawUnitIcon(const UnitDef& def, sf::Vector2f c, float size, sf::Color
         head.setFillColor(a(sf::Color(225, 200, 170)));
         window.draw(head);
         if (helmet) {   // brim over the forehead
-            sf::RectangleShape brim({size * 0.5f, size * 0.06f});
-            brim.setOrigin(size * 0.25f, size * 0.03f);
-            brim.setPosition(c.x, c.y - size * 0.17f);
-            brim.setFillColor(a(sf::Color(60, 74, 48)));
+            sf::RectangleShape brim({size * 0.62f, size * 0.07f});
+            brim.setOrigin(size * 0.31f, size * 0.035f);
+            brim.setPosition(c.x, c.y - size * 0.13f);
+            brim.setFillColor(a(sf::Color(64, 82, 50)));
             window.draw(brim);
         }
         sf::RectangleShape torso({size * 0.42f, size * 0.26f});
         torso.setOrigin(size * 0.21f, 0);
         torso.setPosition(c.x, c.y + size * 0.06f);
-        torso.setFillColor(a(body));
+        torso.setFillColor(a(helmet ? sf::Color(78, 96, 62) : body));   // troopers wear green fatigues
         torso.setOutlineColor(a(sf::Color(230, 230, 230)));
         torso.setOutlineThickness(1.f);
         window.draw(torso);
     } else {
-        sf::RectangleShape hull({size * 0.74f, size * 0.46f});
-        hull.setOrigin(size * 0.37f, size * 0.23f);
-        hull.setPosition(c.x, c.y + size * 0.05f);
+        // hull, tracks, turret and gun all grow with the armour class
+        const float armour = static_cast<float>(def.armour);
+        const float hw = size * (0.58f + 0.022f * armour), hh = size * (0.34f + 0.018f * armour);
+        const float cy = c.y + size * 0.04f;
+        sf::RectangleShape hull({hw, hh});
+        hull.setOrigin(hw / 2, hh / 2);
+        hull.setPosition(c.x, cy);
         hull.setFillColor(a(body));
         hull.setOutlineColor(a(sf::Color(230, 230, 230)));
         hull.setOutlineThickness(1.f);
+        for (int side = -1; side <= 1; side += 2) {   // tracks
+            sf::RectangleShape track({hw + size * 0.04f, size * 0.07f});
+            track.setOrigin(track.getSize().x / 2, track.getSize().y / 2);
+            track.setPosition(c.x, cy + side * (hh / 2 + size * 0.02f));
+            track.setFillColor(a(sf::Color(35, 35, 40)));
+            window.draw(track);
+        }
         window.draw(hull);
-        // turret and gun grow with the armour class: light = small turret, heavy = big turret
-        const float armour = static_cast<float>(def.armour);
-        const float tr = size * (0.06f + 0.014f * armour);
-        sf::RectangleShape barrel({size * (0.20f + 0.025f * armour) + tr, size * (0.045f + 0.004f * armour)});
-        barrel.setOrigin(0, barrel.getSize().y / 2);
-        barrel.setPosition(c.x, c.y + size * 0.05f);
-        barrel.setFillColor(a(sf::Color(220, 220, 220)));
-        window.draw(barrel);
+        const float tr = size * (0.05f + 0.016f * armour);   // light 0.11, medium 0.16, heavy 0.21
+        const float bl = size * (0.14f + 0.015f * armour) + tr;
+        const float bt = size * (0.035f + 0.005f * armour);
+        const int barrels = def.has("double_attack") ? 2 : 1;   // twin guns on the fast light tank
+        for (int i = 0; i < barrels; ++i) {
+            sf::RectangleShape barrel({bl, bt});
+            float off = barrels == 2 ? (i == 0 ? -bt * 0.8f : bt * 0.8f) : 0.f;
+            barrel.setOrigin(0, bt / 2);
+            barrel.setPosition(c.x, cy + off);
+            barrel.setFillColor(a(sf::Color(225, 225, 225)));
+            window.draw(barrel);
+        }
         sf::CircleShape turret(tr);
         turret.setOrigin(tr, tr);
-        turret.setPosition(c.x, c.y + size * 0.05f);
-        turret.setFillColor(a(sf::Color(body.r + 40, body.g + 40, body.b + 40)));
-        turret.setOutlineColor(a(sf::Color(230, 230, 230)));
-        turret.setOutlineThickness(1.f);
+        turret.setPosition(c.x, cy);
+        turret.setFillColor(a(sf::Color(body.r + 45, body.g + 45, body.b + 45)));
+        turret.setOutlineColor(a(sf::Color(235, 235, 235)));
+        turret.setOutlineThickness(1.5f);
         window.draw(turret);
+        if (def.armour >= 10) {   // heavy: extra front plate marking
+            sf::RectangleShape plate({size * 0.06f, hh * 0.8f});
+            plate.setOrigin(0, hh * 0.4f);
+            plate.setPosition(c.x + hw / 2 - size * 0.08f, cy);
+            plate.setFillColor(a(sf::Color(200, 200, 205)));
+            window.draw(plate);
+        }
     }
 }
 
