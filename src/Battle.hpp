@@ -19,6 +19,7 @@ struct Unit {
     int fuel = 0;                // vehicles only (0 max = no fuel system)
     int attacksLeft = 0;
     std::array<int, cfg::MaxWeapons> cooldown{};
+    std::array<int, cfg::MaxWeapons> ammo{};   // shots left per weapon (-1 = unlimited)
     bool holdPosition = false;   // AI: never moves, only shoots
     bool alive = true;
 
@@ -29,18 +30,26 @@ struct Unit {
     bool present() const { return alive && active; }
 };
 
+// Buildings block their tile (nobody can stand on them). Infantry standing next to one can
+// capture it; any weapon can destroy it. Owned buildings give income and may offer actions.
 struct Building {
+    const BuildingDef* def = nullptr;
     std::string name;
     int x = 0, y = 0;
     Side owner = Side::Neutral;
-    bool objective = true;
-    int hp = 100, maxHp = 100;   // buildings can be destroyed
+    bool objective = true;       // capture / destroy target
+    bool protect = false;        // the mission is lost if this building falls
+    int hp = 100, maxHp = 100;
     int armour = 0;
     bool destroyed = false;
+    int attacksLeft = 0;         // uses of its weapons this turn (owner only)
+    int recruitsLeft = 0;        // units that can still be bought here this turn
+    std::array<int, cfg::MaxWeapons> ammo{};
+    std::array<int, cfg::MaxWeapons> cooldown{};
 };
 
 struct BattleEvent {
-    enum class Kind { Message, Move, Attack, Capture, Death, Spawn, Heal, Destroyed };
+    enum class Kind { Message, Move, Attack, Capture, Death, Spawn, Heal, Destroyed, Recruit };
     Kind kind = Kind::Message;
     std::string text;
     int ax = 0, ay = 0, bx = 0, by = 0;
@@ -49,6 +58,11 @@ struct BattleEvent {
 };
 
 enum class Phase { Deploy, PlayerTurn, EnemyTurn, Won, Lost };
+
+struct ObjectiveLine {
+    std::string text;
+    bool done = false;   // already fulfilled (shown with a check mark)
+};
 
 // Damage rule (per the design document):
 //   armour == 0 : damage * terrainMultiplier
@@ -69,6 +83,7 @@ public:
     const std::vector<Building>& buildings() const { return buildings_; }
     const Building* buildingAt(int x, int y) const;
     Building* buildingAt(int x, int y);
+    Building* buildingByIndex(int i) { return i >= 0 && i < static_cast<int>(buildings_.size()) ? &buildings_[i] : nullptr; }
 
     // ---- units -------------------------------------------------------------------
     const std::vector<Unit>& units() const { return units_; }
@@ -86,6 +101,10 @@ public:
     const Mission& mission() const { return mission_; }
     Phase phase() const { return phase_; }
     int round() const { return round_; }
+    int money() const { return money_; }                 // spendable in shops (unspent deployment budget carries over)
+    int incomeNow() const;                               // money per round from owned buildings
+    int kills() const { return kills_; }
+    std::vector<ObjectiveLine> objectiveLines() const;
     const std::string& endReason() const { return endReason_; }
 
     // ---- deployment --------------------------------------------------------------
@@ -112,6 +131,22 @@ public:
     bool attackBuilding(Unit& a, int weaponIdx, Building& b);
     bool attack(Unit& a, int weaponIdx, Unit& target);
 
+    // ---- capturing: an infantry unit next to a building that can still move may take it ----
+    bool canCapture(const Unit& u, const Building& b) const;
+    bool captureBuilding(Unit& u, Building& b);
+
+    // ---- building actions (e.g. a supply post heals/repairs/supplies adjacent friendly units) ----
+    bool buildingWeaponReady(const Building& b, int weaponIdx) const;
+    bool canBuildingSupport(const Building& b, int weaponIdx, const Unit& target) const;
+    int previewSupport(const Building& b, int weaponIdx, const Unit& target) const;
+    bool buildingSupport(Building& b, int weaponIdx, Unit& target);
+
+    // ---- shop: buy units at an owned building with recruits > 0 ----
+    bool canRecruit(const Building& b, const UnitDef& def) const;
+    bool recruit(Building& b, const UnitDef& def);
+    bool findSpawnTile(const Building& b, UnitClass cls, int& x, int& y) const;
+    bool blockedByBuilding(int x, int y) const;   // intact building on that tile
+
     void endPlayerTurn();
 
     // ---- enemy turn: call repeatedly (e.g. every 0.4s) while phase()==EnemyTurn ------
@@ -128,7 +163,11 @@ private:
     void finish(Phase p, const std::string& reason);
     void emit(BattleEvent e) { events_.push_back(std::move(e)); }
     void message(const std::string& text, Side s = Side::Neutral);
-    void tryCapture(Unit& u);
+    void initUnit(Unit& u, const UnitDef& def) const;
+    struct SupportResult { int healed = 0; bool refuelled = false, rearmed = false; int transferred = 0; };
+    SupportResult applySupport(const WeaponDef& w, int& srcAmmo, Unit& t);
+    std::string supportText(const std::string& who, const std::string& weapon, const Unit& t, const SupportResult& r) const;
+    bool aiWantsBuilding(const Building& b) const;
     void checkTriggers(const Unit& mover);
     void spawnGroup(const std::string& group, int tx, int ty);
     int manhattan(int ax, int ay, int bx, int by) const;
@@ -155,5 +194,7 @@ private:
     Phase phase_ = Phase::Deploy;
     int round_ = 1;
     int nextId_ = 1;
+    int money_ = 0;
+    int kills_ = 0;
     std::string endReason_;
 };

@@ -105,7 +105,7 @@ static void testWillAndCooldown(GameData& d) {
 }
 
 static void testCaptureCamoRadio(GameData& d) {
-    // capture: only infantry take buildings, taking the last objective wins
+    // capture: nobody can stand on a building; infantry next to it (with its move left) takes it
     {
         Battle b(d, *d.mission("dawn_1"));
         b.deploy(*d.unit("light_tank"), 6, 9);
@@ -113,14 +113,18 @@ static void testCaptureCamoRadio(GameData& d) {
         b.startBattle();
         Unit* tank = b.unitAt(6, 9);
         Unit* inf = b.unitAt(5, 9);
-        tank->x = 6; tank->y = 2;              // teleport next to the outpost for the test
+        tank->x = 6; tank->y = 2;              // teleport next to the outpost (6,1)
         inf->x = 7; inf->y = 1;
-        CHECK(b.moveUnit(*tank, 6, 1));
-        CHECK(b.buildingAt(6, 1)->owner == Side::Enemy);   // vehicles cannot capture
-        CHECK(b.phase() == Phase::PlayerTurn);
-        tank->x = 6; tank->y = 2;              // step off again
-        CHECK(b.moveUnit(*inf, 6, 1));
+        CHECK(b.blockedByBuilding(6, 1));
+        CHECK(!b.moveUnit(*tank, 6, 1));       // cannot enter a building tile
+        CHECK(!b.canCapture(*tank, *b.buildingAt(6, 1)));   // vehicles cannot capture
+        CHECK(b.canCapture(*inf, *b.buildingAt(6, 1)));
+        CHECK(b.moveUnit(*inf, 8, 1));         // moving away uses the move: no capture any more
+        CHECK(!b.canCapture(*inf, *b.buildingAt(6, 1)));
+        inf->x = 7; inf->y = 1; inf->moved = false;
+        CHECK(b.captureBuilding(*inf, *b.buildingAt(6, 1)));
         CHECK(b.buildingAt(6, 1)->owner == Side::Player);
+        CHECK(inf->moved);
         CHECK(b.phase() == Phase::Won);
     }
     // camouflage: hidden unless an enemy is within CamoRevealRange
@@ -238,19 +242,24 @@ static void testSupportAndBuildings(GameData& d) {
         CHECK(!b.canMove(*tank));
         CHECK(!b.canAttack(*medic, 0, *tank));
         truck->x = 7; truck->y = 9;
-        CHECK(b.canAttack(*truck, 1, *tank));          // repair only
+        CHECK(truck->attacksLeft == 3 && truck->ammo[0] == 5);   // supply 5, repair 4, light heal 4
+        CHECK(b.canAttack(*truck, 1, *tank));          // repair (vehicles only)
         CHECK(b.attack(*truck, 1, *tank));
-        CHECK(tank->hp == 90 && tank->fuel == 0);
-        truck->attacksLeft = 1;
-        CHECK(b.canAttack(*truck, 2, *tank));          // refuel only
-        CHECK(b.attack(*truck, 2, *tank));
-        CHECK(tank->fuel == tank->def->fuel);
-        truck->attacksLeft = 1;
-        CHECK(!b.canAttack(*truck, 2, *tank));         // already full
-        tank->hp = 50; tank->fuel = 1;
-        CHECK(b.canAttack(*truck, 0, *tank));          // supply = repair + refuel in one attack
+        CHECK(tank->hp == 90);
+        CHECK(truck->ammo[1] == 3);
+        CHECK(!b.canAttack(*truck, 2, *tank));         // light heal is for infantry
+        tank->ammo[0] = 1;                             // tank is low on ammo and fuel
+        CHECK(b.canAttack(*truck, 0, *tank));          // supply: refills ALL ammo and fuel
         CHECK(b.attack(*truck, 0, *tank));
-        CHECK(tank->hp == 90 && tank->fuel == tank->def->fuel);
+        CHECK(tank->ammo[0] == tank->def->weapons[0].ammo && tank->fuel == tank->def->fuel);
+        CHECK(truck->ammo[0] == 4);
+        CHECK(!b.canAttack(*truck, 0, *tank));         // nothing left to supply
+        rifle->hp = 10;
+        rifle->x = 7; rifle->y = 8;                    // next to the truck
+        CHECK(b.canAttack(*truck, 2, *rifle));         // light heal
+        CHECK(b.attack(*truck, 2, *rifle));
+        CHECK(rifle->hp == 20);                        // +10 only
+        CHECK(truck->attacksLeft == 0);
         CHECK(!b.canAttack(*truck, 0, *truck));        // cannot target itself
         CHECK(!b.canAttack(*amb, 0, *amb));
         // self heal: medic +10 per round, ambulance none
@@ -260,6 +269,127 @@ static void testSupportAndBuildings(GameData& d) {
         while (b.phase() == Phase::EnemyTurn) b.stepAI();
         CHECK(medic->hp == 40);
         CHECK(amb->hp == 30);
+    }
+}
+
+static void testAmmoEconomyBuildings(GameData& d) {
+    // ammo: Rifleman has 3 shots, Trooper's assault rifle 4 (weapons.csv), per-unit overrides are possible
+    CHECK(d.unit("rifleman")->weapons[0].ammo == 3);
+    CHECK(d.unit("trooper")->weapons[0].ammo == 4);
+    {
+        Battle b(d, *d.mission("dawn_2"));
+        b.deploy(*d.unit("rifleman"), 4, 10);
+        b.startBattle();
+        Unit* me = b.unitAt(4, 10);
+        Unit* en = nullptr;
+        for (auto& u : const_cast<std::vector<Unit>&>(b.units())) if (u.side == Side::Enemy && u.active) { en = &u; break; }
+        en->x = 4; en->y = 8; en->hp = 500;
+        for (int i = 0; i < 3; ++i) {
+            CHECK(b.canAttack(*me, 0, *en));
+            CHECK(b.attack(*me, 0, *en));
+            me->attacksLeft = 1;                   // pretend a new turn
+        }
+        CHECK(me->ammo[0] == 0);
+        CHECK(!b.canAttack(*me, 0, *en));          // out of ammo
+        CHECK(!b.weaponReady(*me, 0));
+    }
+    // supply truck -> supply truck: add / subtract instead of a full refill
+    {
+        Battle b(d, *d.mission("iron_2"));
+        b.deploy(*d.unit("truck"), 5, 10);
+        b.deploy(*d.unit("truck"), 6, 10);
+        b.startBattle();
+        Unit* giver = b.unitAt(5, 10);
+        Unit* taker = b.unitAt(6, 10);
+        taker->ammo[0] = 1;
+        CHECK(b.attack(*giver, 0, *taker));
+        CHECK(giver->ammo[0] == 5 - 1 - 2);        // pays 1 use + hands over 2
+        CHECK(taker->ammo[0] == 3);
+        giver->ammo[0] = 1;                        // only 1 left: cannot give any more
+        giver->attacksLeft = 3;
+        CHECK(!b.canAttack(*giver, 0, *taker));
+    }
+    // money: unspent budget carries over; kills pay; owned buildings pay income; shop
+    {
+        Battle b(d, *d.mission("iron_1"));         // has a player outpost (+10) and supply post (+5)
+        b.deploy(*d.unit("light_tank"), 5, 10);
+        const int left = b.budgetLeft();
+        b.startBattle();
+        CHECK(b.money() == left);
+        CHECK(b.incomeNow() == 15);
+        Building* post = b.buildingAt(11, 10);
+        CHECK(post && post->owner == Side::Player && post->def->recruits == 1);
+        const UnitDef& rifle = *d.unit("rifleman");
+        CHECK(b.canRecruit(*post, rifle));
+        int before = b.money();
+        CHECK(b.recruit(*post, rifle));
+        CHECK(b.money() == before - rifle.cost);
+        CHECK(!b.canRecruit(*post, rifle));        // one purchase per building and turn
+        Unit* fresh = nullptr;
+        for (auto& u : const_cast<std::vector<Unit>&>(b.units())) if (u.def == &rifle && u.side == Side::Player) fresh = &u;
+        CHECK(fresh && !b.blockedByBuilding(fresh->x, fresh->y) && !b.canMove(*fresh));
+        before = b.money();
+        b.endPlayerTurn();
+        CHECK(b.money() == before + 15);
+        while (b.phase() == Phase::EnemyTurn) b.stepAI();
+        CHECK(b.canRecruit(*post, rifle) == (b.money() >= rifle.cost));   // available again next turn
+        // supply post heals unlimited times
+        Unit* t = b.unitAt(5, 10);
+        Building* sp = b.buildingAt(0, 10);
+        t->x = 1; t->y = 10;
+        t->hp = 10;
+        CHECK(sp->def->weapons.size() == 3 && sp->ammo[0] == -1);
+        CHECK(!b.canBuildingSupport(*sp, 0, *t));  // field hospital heals infantry only
+        CHECK(b.canBuildingSupport(*sp, 1, *t));   // repair bay
+        CHECK(b.buildingSupport(*sp, 1, *t));
+        CHECK(t->hp == 40);
+    }
+    // kill reward
+    {
+        Battle b(d, *d.mission("dawn_2"));
+        b.deploy(*d.unit("rifleman"), 4, 10);
+        b.startBattle();
+        Unit* me = b.unitAt(4, 10);
+        Unit* en = nullptr;
+        for (auto& u : const_cast<std::vector<Unit>&>(b.units())) if (u.side == Side::Enemy && u.active) { en = &u; break; }
+        en->x = 4; en->y = 9; en->hp = 1;
+        int before = b.money();
+        CHECK(b.attack(*me, 0, *en));
+        CHECK(!en->alive);
+        CHECK(b.money() == before + d.killReward() && b.kills() == 1);
+    }
+    // protect / survive
+    {
+        Battle b(d, *d.mission("dawn_4"));
+        CHECK(b.mission().objective == Objective::Survive);
+        b.deploy(*d.unit("rifleman"), 5, 10);
+        b.startBattle();
+        Building* home = b.buildingAt(6, 8);
+        CHECK(home && home->protect && home->owner == Side::Player);
+        auto lines = b.objectiveLines();
+        CHECK(lines.size() == 2);
+        // lose it -> mission lost
+        home->hp = 1;
+        // an enemy unit shoots the building
+        Unit* en = nullptr;
+        for (auto& u : const_cast<std::vector<Unit>&>(b.units())) if (u.side == Side::Enemy) { en = &u; break; }
+        b.endPlayerTurn();
+        en->x = 6; en->y = 7; en->attacksLeft = 1;
+        b.attackBuilding(*en, 0, *home);
+        CHECK(home->destroyed);
+        CHECK(b.phase() == Phase::Lost);
+    }
+    {
+        Battle b(d, *d.mission("dawn_4"));
+        b.deploy(*d.unit("rifleman"), 5, 10);
+        b.startBattle();
+        // make every enemy harmless and wait the rounds out
+        for (auto& u : const_cast<std::vector<Unit>&>(b.units())) if (u.side == Side::Enemy) u.holdPosition = true;
+        for (int i = 0; i < 12 && (b.phase() == Phase::PlayerTurn); ++i) {
+            b.endPlayerTurn();
+            for (int g = 0; g < 100 && b.phase() == Phase::EnemyTurn; ++g) b.stepAI();
+        }
+        CHECK(b.phase() == Phase::Won);
     }
 }
 
@@ -337,6 +467,7 @@ int main(int argc, char** argv) {
         testCaptureCamoRadio(d);
         testFogAndTriggers(d);
         testSupportAndBuildings(d);
+        testAmmoEconomyBuildings(d);
         testSimulation(d);
     } catch (const std::exception& e) {
         std::cerr << "EXCEPTION: " << e.what() << "\n";

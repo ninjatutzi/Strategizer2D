@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <map>
@@ -34,6 +35,7 @@ struct WeaponDef {
     int willDamage = 0;    // damage to the target's willpower
     int cooldown = 0;      // turns the weapon is unusable after firing
     bool needsRadio = false;
+    int ammo = -1;         // shots per unit (-1 = unlimited; CSV: 0 / empty / inf). Support weapons use it as uses.
     WeaponType type = WeaponType::Damage;
     bool isSupport() const { return type != WeaponType::Damage; }
 };
@@ -43,6 +45,7 @@ struct UnitDef {
     UnitClass cls = UnitClass::Infantry;
     int hp = 1, will = 5, armour = 0, move = 1, cost = 0;
     int fuel = 0;                     // vehicles: max fuel, 1 is used per turn in which the unit moves (0 = no fuel system)
+    int attacks = 1;                  // attacks per turn (the attribute double_attack makes it at least 2)
     int vision = 4;                   // fog of war: tiles (Manhattan) this unit can see
     std::vector<std::string> attributes;   // base names, e.g. "heilung"
     std::map<std::string, int> attrValues; // optional value, e.g. heilung(10) -> 10
@@ -51,15 +54,27 @@ struct UnitDef {
     bool has(const std::string& attr) const;
     int attrValue(const std::string& attr, int def = 0) const;
     bool isInfantry() const { return cls == UnitClass::Infantry; }
-    int maxAttacks() const { return has("double_attack") ? 2 : 1; }
+    int maxAttacks() const { return std::max(attacks, has("double_attack") ? 2 : 1); }
     std::string abbrev() const;       // short label for units without a sprite
+};
+
+// A type of building (data/buildings.csv)
+struct BuildingDef {
+    std::string id, name;
+    int hp = 100, armour = 0;
+    int income = 0;        // money per round for the owner (player only)
+    int recruits = 0;      // units the owner may buy per turn here (0 = cannot recruit)
+    int attacks = 1;       // uses of its weapons per turn
+    std::vector<WeaponDef> weapons;   // usually support weapons (heal / repair / supply)
 };
 
 struct Campaign {
     std::string id, name, description;
 };
 
-enum class Objective { Capture, Eliminate };
+// capture: take/destroy all objective buildings, eliminate: destroy all enemies,
+// survive: hold out until max_turns are over. (Wiping out all enemies always wins.)
+enum class Objective { Capture, Eliminate, Survive };
 
 struct Mission {
     std::string id, campaign, name, description;
@@ -78,6 +93,8 @@ public:
     const std::vector<Terrain>& terrains() const { return terrains_; }
     const std::vector<UnitDef>& units() const { return units_; }
     const std::vector<Campaign>& campaigns() const { return campaigns_; }
+    const BuildingDef* building(const std::string& id) const;
+    int killReward() const { return killReward_; }
     const std::vector<Mission>& missions() const { return missions_; }
 
     const Terrain* terrainBySymbol(char c) const;
@@ -91,6 +108,8 @@ private:
     std::vector<Terrain> terrains_;
     std::vector<UnitDef> units_;
     std::vector<Campaign> campaigns_;
+    std::vector<BuildingDef> buildings_;
+    int killReward_ = 5;
     std::vector<Mission> missions_;
 };
 

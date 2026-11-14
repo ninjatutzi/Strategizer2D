@@ -14,6 +14,8 @@ public:
     // used by the scripted screenshot demo
     Battle& battle() { return battle_; }
     void select(int unitId);
+    void selectBuilding(int idx);
+    void openShop(bool open) { shopOpen_ = open; }
     void setHover(int tx, int ty) { hx_ = tx; hy_ = ty; }
     void setDeployDef(const UnitDef* d) { deployDef_ = d; }
     void toggleWeapon(int i);
@@ -47,6 +49,10 @@ private:
     void drawUnits();
     void drawEffects();
     void drawPanel(sf::Vector2f mouse);
+    void drawSidebar(sf::Vector2f mouse);
+    void drawBuildingCard(const Building& b, float x, float y, float w, sf::Vector2f mouse);
+    void drawShop(sf::Vector2f mouse);
+    bool onShopClick(sf::Vector2f m);
     void drawDeployPanel(sf::Vector2f mouse);
     void drawBattlePanel(sf::Vector2f mouse);
     void drawUnitCard(const UnitDef& def, const Unit* inst, float x, float y, float w, bool weaponRows,
@@ -57,11 +63,16 @@ private:
     void consumeEvents();
     void log(const std::string& s, sf::Color c = col::TextDim);
     const Unit* selected() const { return battle_.unitById(selectedId_); }
+    Building* selBuilding() { return battle_.buildingByIndex(selectedBuilding_); }
+    const Building* selBuildingC() const { return selectedBuilding_ >= 0 ? &battle_.buildings()[selectedBuilding_] : nullptr; }
 
     const Mission& mission_;
     Battle battle_;
     const UnitDef* deployDef_ = nullptr;
     int selectedId_ = -1;
+    int selectedBuilding_ = -1;  // index into battle_.buildings() (owned buildings can act / recruit)
+    bool shopOpen_ = false;
+    int shopScroll_ = 0;
     int selectedWeapon_ = -1;   // -1 = no weapon selected (no range shown)
     std::vector<int> reach_;     // reachable tiles of the selected unit
     int hx_ = -1, hy_ = -1;      // hovered tile
@@ -76,4 +87,8 @@ private:
     Button startBtn_, endBtn_, menuBtn_, resultMenu_, resultRetry_;
     std::vector<sf::FloatRect> weaponRects_;   // clickable weapon rows of the selected unit
     std::vector<sf::FloatRect> deployRects_;
+    sf::FloatRect recruitRect_{};              // 'buy units' row of the selected building card
+    bool hasRecruitRect_ = false;
+    std::vector<std::pair<sf::FloatRect, int>> shopBuyRects_;   // buy buttons -> unit index
+    sf::FloatRect shopBox_{}, shopCloseRect_{};
 };

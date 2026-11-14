@@ -17,8 +17,10 @@ PPPPPPPPPPPP
 1,9,10,11
 
 [buildings]
-Hill 42,2,2,enemy,1,150
-Bunker,9,2,enemy,1,200,5
+# type,x,y,owner,role[,hp[,armour[,name]]]   types: see data/buildings.csv   role: capture | protect | none
+outpost,2,2,enemy,capture,150,0,Hill 42
+bunker,9,2,enemy,capture
+supplypost,4,8,neutral,none
 
 [triggers]
 tank,3,5,8,6

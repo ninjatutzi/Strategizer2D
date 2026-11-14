@@ -41,7 +41,7 @@ void MenuScreen::draw(sf::Vector2f mouse) {
 // ------------------------------------------------------------------------- Campaigns
 CampaignScreen::CampaignScreen(App& a) : Screen(a) { back_ = {{30, 740, 160, 40}, "< Zurück"}; }
 
-sf::FloatRect CampaignScreen::cardRect(size_t i) const { return {150, 150.f + i * 130.f, 900, 110}; }
+sf::FloatRect CampaignScreen::cardRect(size_t i) const { return {(kScreenW - 900) / 2, 150.f + i * 130.f, 900, 110}; }
 
 void CampaignScreen::event(const sf::Event& e, sf::Vector2f mouse) {
     if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
@@ -56,7 +56,7 @@ void CampaignScreen::event(const sf::Event& e, sf::Vector2f mouse) {
 }
 
 void CampaignScreen::draw(sf::Vector2f mouse) {
-    app.text("Kampagne wählen", 150, 60, 40, col::Text, true);
+    app.text("Kampagne wählen", (kScreenW - 900) / 2, 60, 40, col::Text, true);
     for (size_t i = 0; i < app.data.campaigns().size(); ++i) {
         const Campaign& c = app.data.campaigns()[i];
         auto r = cardRect(i);
@@ -79,7 +79,7 @@ MissionScreen::MissionScreen(App& a, const Campaign& c) : Screen(a), campaign_(c
     back_ = {{30, 740, 160, 40}, "< Zurück"};
 }
 
-sf::FloatRect MissionScreen::cardRect(size_t i) const { return {150, 140.f + i * 110.f, 900, 96}; }
+sf::FloatRect MissionScreen::cardRect(size_t i) const { return {(kScreenW - 900) / 2, 140.f + i * 110.f, 900, 96}; }
 
 void MissionScreen::event(const sf::Event& e, sf::Vector2f mouse) {
     if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
@@ -98,8 +98,8 @@ void MissionScreen::event(const sf::Event& e, sf::Vector2f mouse) {
 }
 
 void MissionScreen::draw(sf::Vector2f mouse) {
-    app.text(campaign_.name, 150, 50, 40, col::Text, true);
-    app.text("Mission wählen", 150, 102, 16, col::TextDim);
+    app.text(campaign_.name, (kScreenW - 900) / 2, 50, 40, col::Text, true);
+    app.text("Mission wählen", (kScreenW - 900) / 2, 102, 16, col::TextDim);
     for (size_t i = 0; i < missions_.size(); ++i) {
         const Mission& m = *missions_[i];
         auto r = cardRect(i);

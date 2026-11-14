@@ -1,4 +1,5 @@
-# objective : capture (take all objective buildings) | eliminate (destroy all enemies)
+# objective : capture (take or destroy all objective buildings) | eliminate (destroy all enemies)
+#             | survive (hold out until max_turns are over; needs max_turns > 0)
 #             in both cases wiping out all enemies wins the mission
 # budget    : points the player can spend while deploying
 # max_turns : 0 = unlimited
@@ -6,5 +7,6 @@ id,campaign,name,description,objective,map,budget,max_turns
 dawn_1,dawn,Outpost Alpha,"Nimm den feindlichen Außenposten ein (nur Infanterie) oder zerstöre ihn.",capture,dawn_1.map,60,12
 dawn_2,dawn,River Crossing,"Überquere den Fluss an den Furten und vernichte die Verteidiger.",eliminate,dawn_2.map,90,0
 dawn_3,dawn,Hill 42,"Erobere oder zerstöre den Hügel und den Bunker (Rüstung 5!). Vorsicht vor dem leichten Panzer.",capture,dawn_3.map,130,14
+dawn_4,dawn,Hold the Line,"Halte deinen Außenposten 8 Runden lang. Geht er verloren, ist die Mission verloren!",survive,dawn_4.map,120,8
 iron_1,iron,Armoured Push,"Offenes Gelände. Zerschlage die gegnerische Panzerkolonne.",eliminate,iron_1.map,220,0
 iron_2,iron,Mountain Pass,"Nimm beide Außenposten ein oder zerstöre sie. Fahrzeuge können keine Berge überqueren.",capture,iron_2.map,240,16

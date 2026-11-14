@@ -5,25 +5,32 @@
 # will_damage : willpower removed from the target per hit
 # cooldown    : turns the weapon cannot be used after firing (0 = none)
 # needs_radio : 1 = can only be used while a friendly unit with the attribute "radio" is alive
+# ammo        : shots (uses) per unit before it must be resupplied by a Supply. 0 / empty / inf = unlimited.
+#               units.csv can override it per unit with ammo1..ammo5 (e.g. Rifleman 3 shots, Trooper 4)
 # type        : damage (default) | heal | repair | refuel | supply
 #               heal   = restores `damage` HP of friendly INFANTRY (shown green)
 #               repair = restores `damage` HP of friendly VEHICLES
 #               refuel = refills a friendly vehicle's fuel to its default
-#               supply = repair + refuel
+#               supply = refills ALL ammo + fuel of the target. `damage` = how many supplies it hands over when the
+#                        target is another supply truck (add to the target, subtract from the giver)
 #               (support weapons only work on friendly units that need them; ap / will_damage are ignored)
-id,name,range,damage,ap,will_damage,cooldown,needs_radio,type
-rifle,Rifle,3,15,1,1,0,0,damage
-assault_rifle,Assault Rifle,3,20,1,1,0,0,damage
-grenade,Grenade,2,30,2,2,2,0,damage
-light_cannon,Light Cannon,3,25,2,1,0,0,damage
-light_mg,Machine Gun,2,12,1,2,0,0,damage
-medium_cannon,Medium Cannon,4,45,3,2,0,0,damage
-heavy_cannon,Heavy Cannon,4,70,4,3,1,0,damage
-coax_mg,Coaxial MG,2,12,1,2,0,0,damage
+id,name,range,damage,ap,will_damage,cooldown,needs_radio,type,ammo
+rifle,Rifle,3,15,1,1,0,0,damage,3
+assault_rifle,Assault Rifle,3,20,1,1,0,0,damage,4
+grenade,Grenade,2,30,2,2,2,0,damage,2
+light_cannon,Light Cannon,3,25,2,1,0,0,damage,6
+light_mg,Machine Gun,2,12,1,2,0,0,damage,10
+medium_cannon,Medium Cannon,4,45,3,2,0,0,damage,6
+heavy_cannon,Heavy Cannon,4,70,4,3,1,0,damage,5
+coax_mg,Coaxial MG,2,12,1,2,0,0,damage,10
 # Example for later (artillery needs a radio operator):
-# mortar,Mortar,6,50,2,3,1,1
-first_aid,First Aid,1,25,0,0,0,0,heal
-field_treatment,Field Treatment,2,30,0,0,0,0,heal
-supply,Supply,1,40,0,0,0,0,supply
-supply_repair,Supply: Repair,1,40,0,0,0,0,repair
-supply_fuel,Supply: Fuel,1,0,0,0,0,0,refuel
+# mortar,Mortar,6,50,2,3,1,1,damage,4
+first_aid,First Aid,1,25,0,0,0,0,heal,4
+field_treatment,Field Treatment,2,30,0,0,0,0,heal,6
+supply,Supply,1,2,0,0,0,0,supply,5
+supply_repair,Repair,1,40,0,0,0,0,repair,4
+supply_fuel,Supply: Fuel,1,0,0,0,0,0,refuel,4
+heal_light,Light Heal,1,10,0,0,0,0,heal,4
+heal_post,Field Hospital,2,25,0,0,0,0,heal,0
+repair_post,Repair Bay,2,30,0,0,0,0,repair,0
+supply_post,Supply Depot,2,3,0,0,0,0,supply,0
