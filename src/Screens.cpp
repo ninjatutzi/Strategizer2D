@@ -28,10 +28,11 @@ void MenuScreen::draw(sf::Vector2f mouse) {
     app.text(sub, (kScreenW - app.textWidth(sub, 20)) / 2, 255, 20, col::TextDim);
 
     // decorative row of units
-    float x = kScreenW / 2 - 2 * 90;
+    const float step = 80.f;
+    float x = kScreenW / 2 - (static_cast<float>(app.data.units().size()) - 1) * step / 2;
     for (const auto& u : app.data.units()) {
         app.drawUnitIcon(u, {x, 340}, 64, col::Player);
-        x += 90;
+        x += step;
     }
     app.button(play_, mouse);
     app.button(quit_, mouse);

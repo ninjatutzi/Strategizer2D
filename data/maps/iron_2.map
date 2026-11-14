@@ -17,8 +17,8 @@ MMPPPPPPPPMM
 2,9,9,11
 
 [buildings]
-North Outpost,4,1,enemy,1
-East Outpost,9,5,enemy,1
+North Outpost,4,1,enemy,1,120
+East Outpost,9,5,enemy,1,120
 
 [triggers]
 flank,3,5,8,6

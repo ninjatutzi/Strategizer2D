@@ -43,6 +43,7 @@ private:
     void drawBoard(sf::Vector2f mouse);
     void drawTile(int tx, int ty);
     void drawBuilding(const Building& b);
+    void drawBadge(float x, float y, char letter, sf::Color fill, bool plus);
     void drawUnits();
     void drawEffects();
     void drawPanel(sf::Vector2f mouse);

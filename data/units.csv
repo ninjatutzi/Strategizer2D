@@ -6,13 +6,19 @@
 # move       : Bewegung - movement points per turn (terrain costs apply)
 # vision     : Sicht - fog of war: how many tiles (Manhattan distance) the unit can see
 #              (optional; default 5 for infantry, 4 for vehicles)
+# fuel       : vehicles only: max fuel. One fuel is used per turn in which the unit moves; at 0 it cannot move.
+#              Refilled by a truck (refuel/supply weapon). 0 = no fuel system (infantry, truck)
 # cost       : deployment cost
-# attributes : separated by | ; known: radio | double_attack | camouflage
+# attributes : separated by | ; known: radio | double_attack | camouflage | heilung(N)
+#              heilung(10) = the unit heals itself for 10 HP at the start of each of its turns
 # sprite     : image in assets/units/ (optional, default <id>.png; a fallback is drawn if missing)
 # weapon1-5  : ids from weapons.csv
-id,name,class,hp,will,armour,move,vision,cost,attributes,sprite,weapon1,weapon2,weapon3,weapon4,weapon5
-rifleman,Rifleman,infantry,50,5,0,3,5,10,,rifleman.png,rifle,,,,
-trooper,Trooper,infantry,75,6,0,3,6,20,camouflage,trooper.png,assault_rifle,grenade,,,
-light_tank,Light Tank,vehicle,100,5,4,5,4,40,double_attack,light_tank.png,light_cannon,light_mg,,,
-medium_tank,Medium Tank,vehicle,140,5,7,4,4,70,,medium_tank.png,medium_cannon,coax_mg,,,
-heavy_tank,Heavy Tank,vehicle,200,5,10,3,3,110,,heavy_tank.png,heavy_cannon,coax_mg,,,
+id,name,class,hp,will,armour,move,vision,fuel,cost,attributes,sprite,weapon1,weapon2,weapon3,weapon4,weapon5
+rifleman,Rifleman,infantry,50,5,0,3,5,0,10,,rifleman.png,rifle,,,,
+trooper,Trooper,infantry,75,6,0,3,6,0,20,camouflage,trooper.png,assault_rifle,grenade,,,
+light_tank,Light Tank,vehicle,100,5,4,5,4,8,40,double_attack,light_tank.png,light_cannon,light_mg,,,
+medium_tank,Medium Tank,vehicle,140,5,7,4,4,7,70,,medium_tank.png,medium_cannon,coax_mg,,,
+heavy_tank,Heavy Tank,vehicle,200,5,10,3,3,6,110,,heavy_tank.png,heavy_cannon,coax_mg,,,
+medic,Medic,infantry,50,5,0,3,5,0,15,heilung(10),medic.png,first_aid,,,,
+ambulance,Ambulance,vehicle,90,5,4,5,4,8,45,,ambulance.png,field_treatment,,,,
+truck,Supply Truck,vehicle,80,5,4,5,4,0,35,,truck.png,supply,supply_repair,supply_fuel,,

@@ -13,6 +13,11 @@ bool UnitDef::has(const std::string& attr) const {
     return std::find(attributes.begin(), attributes.end(), attr) != attributes.end();
 }
 
+int UnitDef::attrValue(const std::string& attr, int def) const {
+    auto it = attrValues.find(attr);
+    return it == attrValues.end() ? def : it->second;
+}
+
 std::string UnitDef::abbrev() const {
     std::string s;
     bool start = true;
@@ -50,7 +55,7 @@ std::vector<const Mission*> GameData::missionsOf(const std::string& campaignId) 
 
 namespace {
 
-const std::vector<std::string> kKnownAttributes = {"radio", "double_attack", "camouflage"};
+const std::vector<std::string> kKnownAttributes = {"radio", "double_attack", "camouflage", "heilung"};
 
 template <class T>
 void requireUnique(const std::vector<T>& v, const std::string& id, const CsvRow& row, const char* what) {
@@ -101,6 +106,13 @@ void GameData::load(const std::string& rootDir) {
         w.willDamage = row.intOr("will_damage", 0);
         w.cooldown = row.intOr("cooldown", 0);
         w.needsRadio = row.intOr("needs_radio", 0) != 0;
+        std::string type = toLower(row.str("type", "damage"));
+        if (type == "damage") w.type = WeaponType::Damage;
+        else if (type == "heal") w.type = WeaponType::Heal;
+        else if (type == "repair") w.type = WeaponType::Repair;
+        else if (type == "refuel") w.type = WeaponType::Refuel;
+        else if (type == "supply") w.type = WeaponType::Supply;
+        else row.fail("type must be damage, heal, repair, refuel or supply");
         if (w.range < 1) row.fail("range must be >= 1");
         if (w.cooldown < 0) row.fail("cooldown must be >= 0");
         if (weapons.count(w.id)) row.fail("duplicate weapon id '" + w.id + "'");
@@ -123,6 +135,8 @@ void GameData::load(const std::string& rootDir) {
         u.armour = row.requireInt("armour");
         u.move = row.requireInt("move");
         u.cost = row.requireInt("cost");
+        u.fuel = row.intOr("fuel", 0);
+        if (u.fuel < 0) row.fail("fuel must be >= 0");
         u.vision = row.intOr("vision", u.cls == UnitClass::Infantry ? 5 : 4);
         if (u.vision < 1) row.fail("vision must be >= 1");
         if (u.hp < 1) row.fail("hp must be >= 1");
@@ -132,10 +146,20 @@ void GameData::load(const std::string& rootDir) {
         for (auto& a : split(row.str("attributes"), '|')) {
             std::string attr = toLower(trim(a));
             if (attr.empty()) continue;
+            int value = 0;                       // "heilung(10)" -> name heilung, value 10
+            size_t lp = attr.find('(');
+            if (lp != std::string::npos) {
+                size_t rp = attr.find(')', lp);
+                if (rp == std::string::npos) row.fail("attribute '" + attr + "': missing ')'");
+                value = std::atoi(attr.substr(lp + 1, rp - lp - 1).c_str());
+                attr = trim(attr.substr(0, lp));
+            }
+            if (attr == "heal") attr = "heilung";   // English alias
             if (std::find(kKnownAttributes.begin(), kKnownAttributes.end(), attr) == kKnownAttributes.end())
                 std::cerr << "warning: " << row.file << ":" << row.line
                           << ": unknown attribute '" << attr << "' (no effect)\n";
             u.attributes.push_back(attr);
+            u.attrValues[attr] = value;
         }
         for (int i = 1; i <= cfg::MaxWeapons; ++i) {
             std::string col = "weapon" + std::to_string(i);

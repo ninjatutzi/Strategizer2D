@@ -16,6 +16,7 @@ struct Unit {
     int x = 0, y = 0;
     int hp = 0;
     int will = 0;
+    int fuel = 0;                // vehicles only (0 max = no fuel system)
     int attacksLeft = 0;
     std::array<int, cfg::MaxWeapons> cooldown{};
     bool holdPosition = false;   // AI: never moves, only shoots
@@ -33,10 +34,13 @@ struct Building {
     int x = 0, y = 0;
     Side owner = Side::Neutral;
     bool objective = true;
+    int hp = 100, maxHp = 100;   // buildings can be destroyed
+    int armour = 0;
+    bool destroyed = false;
 };
 
 struct BattleEvent {
-    enum class Kind { Message, Move, Attack, Capture, Death, Spawn };
+    enum class Kind { Message, Move, Attack, Capture, Death, Spawn, Heal, Destroyed };
     Kind kind = Kind::Message;
     std::string text;
     int ax = 0, ay = 0, bx = 0, by = 0;
@@ -64,6 +68,7 @@ public:
     const Terrain& terrainAt(int x, int y) const { return *tiles_[y * width() + x]; }
     const std::vector<Building>& buildings() const { return buildings_; }
     const Building* buildingAt(int x, int y) const;
+    Building* buildingAt(int x, int y);
 
     // ---- units -------------------------------------------------------------------
     const std::vector<Unit>& units() const { return units_; }
@@ -100,7 +105,11 @@ public:
 
     bool weaponReady(const Unit& u, int weaponIdx) const;
     bool canAttack(const Unit& a, int weaponIdx, const Unit& target) const;
+    // damage of an attack, or the HP restored by a support weapon (heal/repair/supply)
     int previewDamage(const Unit& a, int weaponIdx, const Unit& target) const;
+    bool canAttackBuilding(const Unit& a, int weaponIdx, const Building& b) const;
+    int previewDamageBuilding(const Unit& a, int weaponIdx, const Building& b) const;
+    bool attackBuilding(Unit& a, int weaponIdx, Building& b);
     bool attack(Unit& a, int weaponIdx, Unit& target);
 
     void endPlayerTurn();

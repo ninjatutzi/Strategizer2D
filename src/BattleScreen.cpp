@@ -23,18 +23,21 @@ sf::Color withAlpha(sf::Color c, int a) { c.a = static_cast<sf::Uint8>(std::clam
 sf::Color sideColor(Side s) { return s == Side::Player ? col::Player : s == Side::Enemy ? col::Enemy : sf::Color(190, 190, 190); }
 sf::Color hpColor(float f) { return f > 0.5f ? sf::Color(90, 190, 90) : f > 0.25f ? sf::Color(230, 190, 60) : sf::Color(220, 70, 60); }
 
-std::string attrLabel(const std::string& a) {
+std::string attrLabel(const UnitDef& d, const std::string& a) {
     if (a == "radio") return "Funkgerät";
     if (a == "double_attack") return "Doppelangriff";
     if (a == "camouflage") return "Tarnung";
+    if (a == "heilung") return "Heilung " + std::to_string(d.attrValue("heilung")) + "/Runde";
     return a;
 }
 
 std::string attrList(const UnitDef& d) {
     std::string s;
-    for (auto& a : d.attributes) s += (s.empty() ? "" : ", ") + attrLabel(a);
+    for (auto& a : d.attributes) s += (s.empty() ? "" : ", ") + attrLabel(d, a);
     return s;
 }
+
+const sf::Color kSupportGreen(70, 210, 110);
 
 std::string num(float v) {
     char buf[32];
@@ -44,8 +47,29 @@ std::string num(float v) {
 }
 
 std::string weaponLine(const WeaponDef& w) {
-    return "Reichw. " + std::to_string(w.range) + "  Schaden " + num(w.damage) + "  AP " + num(w.ap) +
-           "  Moral " + std::to_string(w.willDamage);
+    std::string r = "Reichw. " + std::to_string(w.range);
+    switch (w.type) {
+    case WeaponType::Damage:
+        return r + "  Schaden " + num(w.damage) + "  AP " + num(w.ap) + "  Moral " + std::to_string(w.willDamage);
+    case WeaponType::Heal: return r + "  Heilt Infanterie +" + num(w.damage) + " HP";
+    case WeaponType::Repair: return r + "  Repariert Fahrzeuge +" + num(w.damage) + " HP";
+    case WeaponType::Refuel: return r + "  Füllt Treibstoff auf";
+    case WeaponType::Supply: return r + "  Repariert +" + num(w.damage) + " HP und tankt auf";
+    }
+    return r;
+}
+
+std::string weaponShort(const WeaponDef& w) {
+    switch (w.type) {
+    case WeaponType::Damage:
+        return "R" + std::to_string(w.range) + "  Dmg " + num(w.damage) + "  AP " + num(w.ap) + "  Moral " + std::to_string(w.willDamage) +
+               (w.cooldown ? "  CD " + std::to_string(w.cooldown) : "");
+    case WeaponType::Heal: return "R" + std::to_string(w.range) + "  Heilt Inf. +" + num(w.damage);
+    case WeaponType::Repair: return "R" + std::to_string(w.range) + "  Repariert +" + num(w.damage);
+    case WeaponType::Refuel: return "R" + std::to_string(w.range) + "  Tankt auf";
+    case WeaponType::Supply: return "R" + std::to_string(w.range) + "  Repariert +" + num(w.damage) + " & tankt";
+    }
+    return "";
 }
 
 } // namespace
@@ -106,6 +130,17 @@ void BattleScreen::consumeEvents() {
             log(e.text, sideColor(e.side));
             break;
         case BattleEvent::Kind::Death:
+            if (!seen) break;
+            popups_.push_back({"Zerstört", tileCenter(e.ax, e.ay), sf::Color(255, 255, 255), 0});
+            log(e.text, sideColor(e.side));
+            break;
+        case BattleEvent::Kind::Heal:
+            if (!seen) break;
+            if (e.ax != e.bx || e.ay != e.by) shots_.push_back({tileCenter(e.ax, e.ay), tileCenter(e.bx, e.by), kSupportGreen, 0});
+            popups_.push_back({e.damage > 0 ? "+" + std::to_string(e.damage) : "Tank voll", tileCenter(e.bx, e.by), kSupportGreen, 0});
+            log(e.text, kSupportGreen);
+            break;
+        case BattleEvent::Kind::Destroyed:
             if (!seen) break;
             popups_.push_back({"Zerstört", tileCenter(e.ax, e.ay), sf::Color(255, 255, 255), 0});
             log(e.text, sideColor(e.side));
@@ -274,13 +309,23 @@ void BattleScreen::clickBoard(int tx, int ty) {
 
     if (own && selectedWeapon_ >= 0) {
         // weapon mode: clicking a target in range fires, clicking empty ground leaves weapon mode
-        if (t && t->side == Side::Enemy && battle_.canAttack(*sel, selectedWeapon_, *t)) {
+        if (t && battle_.canAttack(*sel, selectedWeapon_, *t)) {   // enemy in range, or friendly unit for support weapons
             battle_.attack(*sel, selectedWeapon_, *t);
             consumeEvents();
             afterAction();
             return;
         }
-        if (!t) { selectedWeapon_ = -1; return; }
+        if (!t) {
+            Building* b = battle_.buildingAt(tx, ty);
+            if (b && battle_.canAttackBuilding(*sel, selectedWeapon_, *b)) {
+                battle_.attackBuilding(*sel, selectedWeapon_, *b);
+                consumeEvents();
+                afterAction();
+                return;
+            }
+            selectedWeapon_ = -1;
+            return;
+        }
     } else if (own && !t && battle_.canMove(*sel) && !reach_.empty() && reach_[ty * battle_.width() + tx] >= 0) {
         battle_.moveUnit(*sel, tx, ty);
         consumeEvents();
@@ -379,6 +424,25 @@ void BattleScreen::drawTile(int tx, int ty) {
 void BattleScreen::drawBuilding(const Building& b) {
     auto& w = app.window;
     sf::Vector2f o = tileOrigin(b.x, b.y);
+    if (b.destroyed) {   // rubble
+        const float rub[5][3] = {{0.28f, 0.62f, 0.13f}, {0.48f, 0.52f, 0.16f}, {0.68f, 0.64f, 0.12f}, {0.40f, 0.74f, 0.10f}, {0.58f, 0.76f, 0.09f}};
+        for (auto& r : rub) {
+            sf::CircleShape c(r[2] * kTile, 6);
+            c.setOrigin(r[2] * kTile, r[2] * kTile);
+            c.setPosition(o.x + r[0] * kTile, o.y + r[1] * kTile);
+            c.setFillColor(sf::Color(70, 64, 60));
+            c.setOutlineColor(sf::Color(30, 28, 26));
+            c.setOutlineThickness(1.f);
+            w.draw(c);
+        }
+        sf::RectangleShape beam({kTile * 0.4f, 4.f});
+        beam.setOrigin(kTile * 0.2f, 2.f);
+        beam.setPosition(o.x + kTile * 0.5f, o.y + kTile * 0.4f);
+        beam.setRotation(-25.f);
+        beam.setFillColor(sf::Color(110, 84, 56));
+        w.draw(beam);
+        return;
+    }
     sf::RectangleShape body({kTile * 0.44f, kTile * 0.34f});
     body.setPosition(o.x + kTile * 0.34f, o.y + kTile * 0.5f);
     body.setFillColor(sf::Color(120, 100, 80));
@@ -402,7 +466,31 @@ void BattleScreen::drawBuilding(const Building& b) {
     flag.setOutlineColor(sf::Color(20, 20, 20));
     flag.setOutlineThickness(1.f);
     w.draw(flag);
-    if (b.objective) app.text("\xE2\x98\x85", o.x + kTile - 16, o.y + 2, 13, col::Accent);   // star = objective
+    if (b.objective) app.text("\xE2\x98\x85", o.x + kTile * 0.4f, o.y + 1, 13, col::Accent);   // star = objective
+    if (b.hp < b.maxHp) {   // damaged: show a health bar
+        float f = static_cast<float>(b.hp) / b.maxHp;
+        drawBar(o.x + 5, o.y + kTile - 8, kTile - 10, 5, f, hpColor(f));
+    }
+}
+
+void BattleScreen::drawBadge(float x, float y, char letter, sf::Color fill, bool plus) {
+    sf::CircleShape c(6.5f);
+    c.setOrigin(6.5f, 6.5f);
+    c.setPosition(x, y);
+    c.setFillColor(fill);
+    c.setOutlineColor(sf::Color(10, 10, 14, 220));
+    c.setOutlineThickness(1.f);
+    app.window.draw(c);
+    if (plus) {
+        sf::RectangleShape h({8.f, 2.f}), v({2.f, 8.f});
+        h.setOrigin(4.f, 1.f); v.setOrigin(1.f, 4.f);
+        h.setPosition(x, y); v.setPosition(x, y);
+        app.window.draw(h); app.window.draw(v);
+    } else {
+        std::string t(1, letter);
+        float w = app.textWidth(t, 10, true);
+        app.text(t, x - w / 2, y - 8, 10, sf::Color::White, true);
+    }
 }
 
 void BattleScreen::drawUnits() {
@@ -413,9 +501,18 @@ void BattleScreen::drawUnits() {
         sf::Vector2f o = tileOrigin(u.x, u.y);
         bool exhausted = ph == Phase::PlayerTurn && u.side == Side::Player && u.attacksLeft == 0 && !battle_.canMove(u);
         app.drawUnitIcon(*u.def, {c.x, c.y - 2}, kTile * 0.74f, sideColor(u.side), exhausted ? 0.5f : 1.f);
-        if (u.def->has("camouflage")) app.text("\xE2\x97\x8C", o.x + 2, o.y + kTile - 20, 12, col::TextDim);
         drawBar(o.x + 5, o.y + kTile - 8, kTile - 10, 5, static_cast<float>(u.hp) / u.def->hp, hpColor(static_cast<float>(u.hp) / u.def->hp));
-        if (u.will <= 0 && ph != Phase::Deploy) app.text("!", o.x + kTile - 12, o.y + 1, 17, sf::Color(255, 90, 70), true);
+        // small status icons in the top-right corner of the tile (right to left)
+        float bx = o.x + kTile - 8, by = o.y + 8;
+        auto badge = [&](char l, sf::Color c, bool plus = false) { drawBadge(bx, by, l, c, plus); bx -= 14; };
+        if (u.will <= 0 && ph != Phase::Deploy) badge('!', sf::Color(210, 50, 40));                 // morale broken
+        if (u.def->fuel > 0 && u.fuel <= 2) badge('F', u.fuel == 0 ? sf::Color(210, 50, 40) : sf::Color(215, 140, 30));   // low fuel
+        bool support = u.def->has("heilung");                                                       // self-healing or can heal/repair others
+        for (auto& wp : u.def->weapons) if (wp.isSupport()) support = true;
+        if (support) badge('+', sf::Color(40, 160, 80), true);
+        if (u.def->has("camouflage")) badge('T', sf::Color(90, 110, 80));
+        if (u.def->has("radio")) badge('R', sf::Color(60, 110, 200));
+        if (u.def->has("double_attack")) badge('2', sf::Color(190, 110, 30));
         if (u.id == selectedId_) {
             app.rect({o.x, o.y, kTile, kTile}, sf::Color::Transparent, col::Accent, 3.f);
         }
@@ -496,18 +593,26 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
                                  withAlpha(own ? col::Player : col::Enemy, 200), 1.f);
                     }
         if (weaponMode && ph == Phase::PlayerTurn) {
-            int range = sel->def->weapons[selectedWeapon_].range;
+            const WeaponDef& wp = sel->def->weapons[selectedWeapon_];
+            const bool support = wp.isSupport();   // support weapons are shown in green, attacks in orange/red
+            const sf::Color rangeC = support ? kSupportGreen : sf::Color(255, 150, 40);
+            const sf::Color targetC = support ? kSupportGreen : sf::Color(255, 60, 60);
             for (int y = 0; y < H; ++y)
                 for (int x = 0; x < W; ++x) {
                     int d = std::abs(x - sel->x) + std::abs(y - sel->y);
-                    if (d < 1 || d > range) continue;
+                    if (d < 1 || d > wp.range) continue;
                     auto o = tileOrigin(x, y);
-                    app.rect({o.x, o.y, kTile, kTile}, sf::Color(255, 150, 40, 55), sf::Color(255, 150, 40, 170), 1.f);
+                    app.rect({o.x, o.y, kTile, kTile}, withAlpha(rangeC, 55), withAlpha(rangeC, 170), 1.f);
                 }
             for (auto& u : battle_.units())
-                if (u.present() && u.side == Side::Enemy && battle_.canAttack(*sel, selectedWeapon_, u)) {
+                if (u.present() && battle_.canAttack(*sel, selectedWeapon_, u)) {
                     auto o = tileOrigin(u.x, u.y);
-                    app.rect({o.x, o.y, kTile, kTile}, sf::Color(255, 40, 40, 90), sf::Color(255, 60, 60), 3.f);
+                    app.rect({o.x, o.y, kTile, kTile}, withAlpha(targetC, 90), targetC, 3.f);
+                }
+            for (auto& b : battle_.buildings())
+                if (battle_.canAttackBuilding(*sel, selectedWeapon_, b)) {
+                    auto o = tileOrigin(b.x, b.y);
+                    app.rect({o.x, o.y, kTile, kTile}, withAlpha(targetC, 60), targetC, 3.f);
                 }
         }
     }
@@ -520,13 +625,26 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
     }
     drawEffects();
 
-    // damage preview tooltip
+    // preview tooltip for the selected weapon (damage / healing)
     if (sel && sel->side == Side::Player && selectedWeapon_ >= 0 && hx_ >= 0 && ph == Phase::PlayerTurn) {
+        std::string s;
         const Unit* t = battle_.unitAt(hx_, hy_);
-        if (t && t->side == Side::Enemy && battle_.visibleTo(*t, Side::Player) && battle_.canAttack(*sel, selectedWeapon_, *t)) {
-            int dmg = battle_.previewDamage(*sel, selectedWeapon_, *t);
-            std::string s = "Schaden " + std::to_string(dmg) + "  (HP " + std::to_string(t->hp) + " > " +
-                            std::to_string(std::max(0, t->hp - dmg)) + ")";
+        if (t && battle_.canAttack(*sel, selectedWeapon_, *t)) {
+            int v = battle_.previewDamage(*sel, selectedWeapon_, *t);
+            if (sel->def->weapons[selectedWeapon_].isSupport()) {
+                s = "Heilung +" + std::to_string(v) + "  (HP " + std::to_string(t->hp) + " > " + std::to_string(t->hp + v) + ")";
+                if (v == 0) s = "Tankt auf";
+            } else {
+                s = "Schaden " + std::to_string(v) + "  (HP " + std::to_string(t->hp) + " > " + std::to_string(std::max(0, t->hp - v)) + ")";
+            }
+        } else if (!t) {
+            const Building* b = battle_.buildingAt(hx_, hy_);
+            if (b && battle_.canAttackBuilding(*sel, selectedWeapon_, *b)) {
+                int v = battle_.previewDamageBuilding(*sel, selectedWeapon_, *b);
+                s = "Schaden " + std::to_string(v) + "  (HP " + std::to_string(b->hp) + " > " + std::to_string(std::max(0, b->hp - v)) + ")";
+            }
+        }
+        if (!s.empty()) {
             float w = app.textWidth(s, 15) + 16;
             auto c = tileCenter(hx_, hy_);
             float x = std::clamp(c.x - w / 2, kBoardX, kBoardX + W * kTile - w);
@@ -539,7 +657,7 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
 
 void BattleScreen::drawTopBar() {
     app.text(mission_.name, 20, 8, 24, col::Text, true);
-    std::string obj = mission_.objective == Objective::Capture ? "Ziel: Alle \xE2\x98\x85-Gebäude einnehmen (nur Infanterie) oder alle Gegner vernichten"
+    std::string obj = mission_.objective == Objective::Capture ? "Ziel: Alle \xE2\x98\x85-Gebäude einnehmen (nur Infanterie) oder zerstören - oder alle Gegner vernichten"
                                                               : "Ziel: Alle gegnerischen Truppen vernichten";
     app.text(obj, 20, 40, 14, col::TextDim);
 
@@ -582,6 +700,14 @@ void BattleScreen::drawUnitCard(const UnitDef& d, const Unit* u, float x, float 
         app.rect({x + 56 + i * 16.f, cy + 1, 12, 12}, i < will ? sf::Color(120, 170, 255) : sf::Color(55, 60, 75));
     if (u && will <= 0) app.text("gebrochen: kann sich nicht bewegen", x + 62 + d.will * 16.f, cy - 2, 12, sf::Color(255, 120, 100));
     cy += 24;
+    if (d.fuel > 0) {
+        int fuel = u ? u->fuel : d.fuel;
+        app.text("Treibstoff", x, cy - 2, 14, col::TextDim);
+        for (int i = 0; i < d.fuel; ++i)
+            app.rect({x + 76 + i * 14.f, cy + 1, 10, 12}, i < fuel ? (fuel <= 2 ? sf::Color(230, 150, 40) : sf::Color(200, 190, 90)) : sf::Color(55, 60, 75));
+        if (u && fuel == 0) app.text("leer: kann sich nicht bewegen", x + 82 + d.fuel * 14.f, cy - 2, 12, sf::Color(255, 120, 100));
+        cy += 24;
+    }
     app.text("Rüstung " + std::to_string(d.armour) + "   Bewegung " + std::to_string(d.move) + "   Sicht " + std::to_string(d.vision) + "   Kosten " + std::to_string(d.cost),
              x, cy, 14, col::Text);
     cy += 22;
@@ -602,10 +728,10 @@ void BattleScreen::drawUnitCard(const UnitDef& d, const Unit* u, float x, float 
         bool isSel = weaponRows && u && u->side == Side::Player && i == selectedWeapon_;
         if (weaponRows) {
             weaponRects_.push_back(r);
-            if (isSel) app.rect(r, sf::Color(70, 80, 105), col::Accent, 1.f);
+            if (isSel) app.rect(r, sf::Color(70, 80, 105), wp.isSupport() ? kSupportGreen : col::Accent, 1.f);
             else if (u && u->side == Side::Player && r.contains(mouse)) app.rect(r, sf::Color(54, 61, 78));
         }
-        sf::Color tc = ready ? col::Text : col::TextDim;
+        sf::Color tc = ready ? (wp.isSupport() ? kSupportGreen : col::Text) : col::TextDim;
         app.text((weaponRows && u && u->side == Side::Player ? std::to_string(i + 1) + "  " : "") + wp.name, x, cy + 1, 15, tc, true);
         app.text(weaponLine(wp), x, cy + 18, 12, col::TextDim);
         std::string extra;
@@ -647,7 +773,9 @@ void BattleScreen::drawDeployPanel(sf::Vector2f mouse) {
         app.text(cost, r.left + r.width - 12 - app.textWidth(cost, 18, true), r.top + 4, 18, affordable ? col::Accent : col::Enemy, true);
         app.text("HP " + std::to_string(d.hp) + "  Moral " + std::to_string(d.will) + "  Rüst. " + std::to_string(d.armour) +
                      "  Bew. " + std::to_string(d.move) + "  Sicht " + std::to_string(d.vision), r.left + 62, r.top + 26, 12, col::TextDim);
-        if (!d.attributes.empty()) app.text(attrList(d), r.left + 62, r.top + 40, 12, col::Accent);
+        std::string extra = attrList(d);
+        if (d.fuel > 0) extra += std::string(extra.empty() ? "" : ", ") + "Treibstoff " + std::to_string(d.fuel);
+        if (!extra.empty()) app.text(extra, r.left + 62, r.top + 40, 12, col::Accent);
     }
     if (units.size() > kDeployRows) {
         std::string hint = "Mausrad: Liste scrollen (" + std::to_string(first + 1) + "-" +
@@ -660,9 +788,8 @@ void BattleScreen::drawDeployPanel(sf::Vector2f mouse) {
         app.text("Waffen: " + deployDef_->name, kInnerX, dy, 14, col::TextDim);
         dy += 20;
         for (auto& w : deployDef_->weapons) {
-            app.text(w.name, kInnerX, dy, 13, col::Text, true);
-            std::string info = "R" + std::to_string(w.range) + "  Dmg " + num(w.damage) + "  AP " + num(w.ap) +
-                               "  Moral " + std::to_string(w.willDamage) + (w.cooldown ? "  CD " + std::to_string(w.cooldown) : "");
+            app.text(w.name, kInnerX, dy, 13, w.isSupport() ? kSupportGreen : col::Text, true);
+            std::string info = weaponShort(w);
             app.text(info, kInnerX + 140, dy, 12, col::TextDim);
             dy += 17;
         }
@@ -683,7 +810,7 @@ void BattleScreen::drawBattlePanel(sf::Vector2f mouse) {
     } else {
         app.text("Keine Truppe ausgewählt", kInnerX, y, 18, col::TextDim);
         app.paragraph("Klicke auf eine deiner Truppen: blaue Felder = Bewegung. Wähle eine Waffe (Klick oder 1-5), um ihre "
-                      "Reichweite zu sehen (orange), rot = angreifbar. Q / Esc wählt die Waffe ab. Jede Truppe darf pro Runde "
+                      "Reichweite zu sehen (orange), rot = angreifbar, grün = Heilung/Versorgung eigener Truppen. Q / Esc wählt die Waffe ab. Jede Truppe darf pro Runde "
                       "bewegen UND angreifen. Gegner außerhalb deiner Sicht sind im Nebel verborgen. Tab = nächste Truppe.",
                       kInnerX, y + 30, kInnerW, 13);
     }
@@ -704,7 +831,10 @@ void BattleScreen::drawBattlePanel(sf::Vector2f mouse) {
                      kInnerX, hy + 20, 13, sideColor(hu->side));
         } else if (const Building* b = battle_.buildingAt(hx_, hy_)) {
             std::string o = b->owner == Side::Player ? "gehört dir" : b->owner == Side::Enemy ? "gehört dem Gegner" : "neutral";
-            app.text(b->name + " (" + o + ")" + (b->objective ? " - Ziel" : ""), kInnerX, hy + 20, 13, sideColor(b->owner));
+            std::string txt = b->name + " (" + o + ")" + (b->objective ? " - Ziel" : "") + "  HP " + std::to_string(b->hp) + "/" + std::to_string(b->maxHp) +
+                              (b->armour ? "  Rüst. " + std::to_string(b->armour) : "");
+            if (b->destroyed) txt = b->name + " (zerstört)";
+            app.text(txt, kInnerX, hy + 20, 13, sideColor(b->owner));
         }
     } else {
         app.text("Fahre über das Spielfeld für Details", kInnerX, hy, 13, col::TextDim);

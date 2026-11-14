@@ -122,6 +122,18 @@ const sf::Texture* App::unitTexture(const UnitDef& def) {
     return it->second.get();
 }
 
+namespace {
+bool hasWeaponType(const UnitDef& d, WeaponType t) {
+    for (auto& w : d.weapons) if (w.type == t) return true;
+    return false;
+}
+bool onlySupport(const UnitDef& d) {
+    if (d.weapons.empty()) return false;
+    for (auto& w : d.weapons) if (!w.isSupport()) return false;
+    return true;
+}
+} // namespace
+
 void App::drawUnitIcon(const UnitDef& def, sf::Vector2f c, float size, sf::Color team, float alpha) {
     auto a = [&](sf::Color col) { col.a = static_cast<sf::Uint8>(col.a * alpha); return col; };
     sf::CircleShape base(size * 0.5f);
@@ -146,12 +158,13 @@ void App::drawUnitIcon(const UnitDef& def, sf::Vector2f c, float size, sf::Color
     sf::Color body(static_cast<sf::Uint8>(team.r * 0.45f), static_cast<sf::Uint8>(team.g * 0.45f),
                    static_cast<sf::Uint8>(team.b * 0.45f));
     if (def.isInfantry()) {
-        const bool helmet = def.id == "trooper";   // better infantry wears a helmet
+        const bool medic = hasWeaponType(def, WeaponType::Heal);   // white helmet + red cross
+        const bool helmet = def.id == "trooper" || medic;           // better infantry wears a helmet
         if (helmet) {
             sf::CircleShape dome(size * 0.27f);
             dome.setOrigin(size * 0.27f, size * 0.27f);
             dome.setPosition(c.x, c.y - size * 0.15f);
-            dome.setFillColor(a(sf::Color(96, 120, 70)));
+            dome.setFillColor(a(medic ? sf::Color(238, 238, 238) : sf::Color(96, 120, 70)));
             dome.setOutlineColor(a(sf::Color(30, 40, 25)));
             dome.setOutlineThickness(1.f);
             window.draw(dome);
@@ -165,17 +178,65 @@ void App::drawUnitIcon(const UnitDef& def, sf::Vector2f c, float size, sf::Color
             sf::RectangleShape brim({size * 0.62f, size * 0.07f});
             brim.setOrigin(size * 0.31f, size * 0.035f);
             brim.setPosition(c.x, c.y - size * 0.13f);
-            brim.setFillColor(a(sf::Color(64, 82, 50)));
+            brim.setFillColor(a(medic ? sf::Color(190, 190, 190) : sf::Color(64, 82, 50)));
             window.draw(brim);
         }
         sf::RectangleShape torso({size * 0.42f, size * 0.26f});
         torso.setOrigin(size * 0.21f, 0);
         torso.setPosition(c.x, c.y + size * 0.06f);
-        torso.setFillColor(a(helmet ? sf::Color(78, 96, 62) : body));   // troopers wear green fatigues
+        torso.setFillColor(a(medic ? sf::Color(235, 235, 235) : helmet ? sf::Color(78, 96, 62) : body));   // troopers wear green fatigues
         torso.setOutlineColor(a(sf::Color(230, 230, 230)));
         torso.setOutlineThickness(1.f);
         window.draw(torso);
+        if (medic) {
+            sf::RectangleShape h({size * 0.18f, size * 0.05f}), v({size * 0.05f, size * 0.18f});
+            h.setOrigin(size * 0.09f, size * 0.025f); v.setOrigin(size * 0.025f, size * 0.09f);
+            h.setPosition(c.x, c.y + size * 0.19f); v.setPosition(c.x, c.y + size * 0.19f);
+            h.setFillColor(a(sf::Color(205, 40, 40))); v.setFillColor(a(sf::Color(205, 40, 40)));
+            window.draw(h); window.draw(v);
+        }
     } else {
+        if (onlySupport(def)) {   // ambulance (white, red cross) / supply truck (cab + crate), no turret
+            const bool amb = hasWeaponType(def, WeaponType::Heal);
+            const float hw = size * 0.78f, hh = size * 0.40f, cy = c.y + size * 0.02f;
+            for (int i = -1; i <= 1; ++i) {
+                sf::CircleShape wheel(size * 0.075f);
+                wheel.setOrigin(size * 0.075f, size * 0.075f);
+                wheel.setPosition(c.x + i * size * 0.27f, cy + hh / 2);
+                wheel.setFillColor(a(sf::Color(30, 30, 34)));
+                window.draw(wheel);
+            }
+            sf::RectangleShape box({hw * 0.68f, hh});
+            box.setOrigin(hw / 2, hh / 2);
+            box.setPosition(c.x - hw * 0.0f, cy);
+            box.setFillColor(a(amb ? sf::Color(238, 238, 238) : sf::Color(150, 132, 84)));
+            box.setOutlineColor(a(sf::Color(230, 230, 230)));
+            box.setOutlineThickness(1.f);
+            window.draw(box);
+            sf::RectangleShape cab({hw * 0.3f, hh * 0.72f});
+            cab.setOrigin(0, hh * 0.36f);
+            cab.setPosition(c.x - hw / 2 + hw * 0.68f, cy + hh * 0.14f);
+            cab.setFillColor(a(body));
+            cab.setOutlineColor(a(sf::Color(230, 230, 230)));
+            cab.setOutlineThickness(1.f);
+            window.draw(cab);
+            if (amb) {
+                sf::RectangleShape h({size * 0.22f, size * 0.06f}), v({size * 0.06f, size * 0.22f});
+                h.setOrigin(size * 0.11f, size * 0.03f); v.setOrigin(size * 0.03f, size * 0.11f);
+                h.setPosition(c.x - hw * 0.17f, cy); v.setPosition(c.x - hw * 0.17f, cy);
+                h.setFillColor(a(sf::Color(205, 40, 40))); v.setFillColor(a(sf::Color(205, 40, 40)));
+                window.draw(h); window.draw(v);
+            } else {
+                for (int i = 0; i < 2; ++i) {   // crate straps
+                    sf::RectangleShape strap({size * 0.04f, hh});
+                    strap.setOrigin(size * 0.02f, hh / 2);
+                    strap.setPosition(c.x - hw * 0.3f + i * hw * 0.28f, cy);
+                    strap.setFillColor(a(sf::Color(100, 86, 52)));
+                    window.draw(strap);
+                }
+            }
+            return;
+        }
         // hull, tracks, turret and gun all grow with the armour class
         const float armour = static_cast<float>(def.armour);
         const float hw = size * (0.58f + 0.022f * armour), hh = size * (0.34f + 0.018f * armour);
@@ -343,6 +404,41 @@ void App::runDemo(const std::string& dir) {
     for (auto& u : bs->battle().units())
         if (u.side == Side::Player && u.alive) { bs->select(u.id); break; }
     frame("6_after_enemy_turn", 0.1f);
+
+    // ---- support units, fuel, destructible buildings (iron_2) ----------------------------
+    goTo(std::make_unique<BattleScreen>(*this, *data.mission("iron_2"))); apply();
+    bs = dynamic_cast<BattleScreen*>(screen_.get());
+    {
+        Battle& b = bs->battle();
+        b.deploy(*data.unit("medic"), 4, 10);
+        b.deploy(*data.unit("rifleman"), 5, 10);
+        b.deploy(*data.unit("ambulance"), 6, 10);
+        b.deploy(*data.unit("truck"), 7, 10);
+        b.deploy(*data.unit("light_tank"), 8, 10);
+        b.deploy(*data.unit("medium_tank"), 3, 10);
+        b.startBattle();
+        b.unitAt(5, 10)->hp = 20;
+        b.unitAt(8, 10)->hp = 45;
+        b.unitAt(8, 10)->fuel = 1;
+        b.unitAt(3, 10)->hp = 100;
+        b.unitAt(3, 10)->fuel = 0;
+        bs->select(b.unitAt(6, 10)->id);
+        bs->toggleWeapon(0);
+        bs->setHover(5, 10);
+        frame("10_ambulance_heal");
+        bs->select(b.unitAt(7, 10)->id);
+        bs->toggleWeapon(0);
+        bs->setHover(8, 10);
+        frame("11_truck_supply");
+        // tank next to a damaged building
+        Unit* lt = b.unitAt(8, 10);
+        lt->x = 9; lt->y = 6;
+        b.buildingAt(9, 5)->hp = 40;
+        bs->select(lt->id);
+        bs->toggleWeapon(0);
+        bs->setHover(9, 5);
+        frame("12_attack_building");
+    }
 
     // ---- UI-level interaction check with synthetic mouse/keyboard events -----------------
     goTo(std::make_unique<BattleScreen>(*this, *data.mission("dawn_1"))); apply();
