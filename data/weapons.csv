@@ -14,7 +14,13 @@
 #               supply = refills ALL ammo + fuel of the target. `damage` = how many supplies it hands over when the
 #                        target is another supply truck (add to the target, subtract from the giver)
 #               (support weapons only work on friendly units that need them; ap / will_damage are ignored)
+
+
 id,name,range,damage,ap,will_damage,cooldown,needs_radio,type,ammo
+
+keys,Keys,100,3,4,0,0,damage,0
+battle_rifle,Battle Rifle,2,0,2,0,0,damage,3
+
 rifle,Rifle,3,15,1,1,0,0,damage,3
 assault_rifle,Assault Rifle,3,20,1,1,0,0,damage,4
 grenade,Grenade,2,30,2,2,2,0,damage,2
@@ -23,8 +29,10 @@ light_mg,Machine Gun,2,12,1,2,0,0,damage,10
 medium_cannon,Medium Cannon,4,45,3,2,0,0,damage,6
 heavy_cannon,Heavy Cannon,4,70,4,3,1,0,damage,5
 coax_mg,Coaxial MG,2,12,1,2,0,0,damage,10
+
 # Example for later (artillery needs a radio operator):
 # mortar,Mortar,6,50,2,3,1,1,damage,4
+
 first_aid,First Aid,1,25,0,0,0,0,heal,4
 field_treatment,Field Treatment,2,30,0,0,0,0,heal,6
 supply,Supply,1,2,0,0,0,0,supply,5
