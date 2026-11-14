@@ -478,7 +478,7 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
             for (int x = 0; x < W; ++x)
                 if (!battle_.tileVisible(x, y, Side::Player)) {
                     auto o = tileOrigin(x, y);
-                    app.rect({o.x, o.y, kTile, kTile}, sf::Color(8, 10, 22, 150));
+                    app.rect({o.x, o.y, kTile, kTile}, sf::Color(135, 135, 140, 120));
                 }
     }
 
