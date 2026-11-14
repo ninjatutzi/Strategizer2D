@@ -16,15 +16,16 @@ struct Unit {
     int x = 0, y = 0;
     int hp = 0;
     int will = 0;
-    int actionsLeft = 0;
+    int attacksLeft = 0;
     std::array<int, cfg::MaxWeapons> cooldown{};
     bool holdPosition = false;   // AI: never moves, only shoots
     bool alive = true;
 
-    bool moved = false;          // this turn
-    bool attacked = false;       // this turn
+    bool moved = false;          // has used its move this turn (a unit may move once AND attack)
+    bool active = true;          // false = dormant enemy that spawns when its group is triggered
+    std::string group;           // trigger group (enemies only)
 
-    int maxActions() const { return def->maxActions(); }
+    bool present() const { return alive && active; }
 };
 
 struct Building {
@@ -35,7 +36,7 @@ struct Building {
 };
 
 struct BattleEvent {
-    enum class Kind { Message, Move, Attack, Capture, Death };
+    enum class Kind { Message, Move, Attack, Capture, Death, Spawn };
     Kind kind = Kind::Message;
     std::string text;
     int ax = 0, ay = 0, bx = 0, by = 0;
@@ -71,7 +72,9 @@ public:
     Unit* unitById(int id);
     const Unit* unitById(int id) const;
     int aliveCount(Side s) const;
-    bool visibleTo(const Unit& u, Side viewer) const;   // camouflage
+    // Fog of war: can `viewer` see this unit? (vision range of the viewer's units, camouflage)
+    bool visibleTo(const Unit& u, Side viewer) const;
+    bool tileVisible(int x, int y, Side viewer) const;
     bool hasRadio(Side s) const;
 
     // ---- state -------------------------------------------------------------------
@@ -117,6 +120,8 @@ private:
     void emit(BattleEvent e) { events_.push_back(std::move(e)); }
     void message(const std::string& text, Side s = Side::Neutral);
     void tryCapture(Unit& u);
+    void checkTriggers(const Unit& mover);
+    void spawnGroup(const std::string& group, int tx, int ty);
     int manhattan(int ax, int ay, int bx, int by) const;
 
     // pathfinding
@@ -133,6 +138,9 @@ private:
     std::vector<Building> buildings_;
     std::vector<Unit> units_;
     std::vector<std::pair<int, int>> deployZone_;
+    struct Trigger { std::string group; int x0, y0, x1, y1; };
+    std::vector<Trigger> triggers_;
+    std::vector<std::string> firedGroups_;
     std::vector<BattleEvent> events_;
     std::deque<int> aiQueue_;
     Phase phase_ = Phase::Deploy;

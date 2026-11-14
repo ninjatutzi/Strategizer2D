@@ -16,6 +16,7 @@ public:
     void select(int unitId);
     void setHover(int tx, int ty) { hx_ = tx; hy_ = ty; }
     void setDeployDef(const UnitDef* d) { deployDef_ = d; }
+    void toggleWeapon(int i);
 
 private:
     struct Popup { std::string text; sf::Vector2f pos; sf::Color color; float age = 0; };
@@ -60,7 +61,7 @@ private:
     Battle battle_;
     const UnitDef* deployDef_ = nullptr;
     int selectedId_ = -1;
-    int selectedWeapon_ = 0;
+    int selectedWeapon_ = -1;   // -1 = no weapon selected (no range shown)
     std::vector<int> reach_;     // reachable tiles of the selected unit
     int hx_ = -1, hy_ = -1;      // hovered tile
     float aiTimer_ = 0;

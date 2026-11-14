@@ -146,11 +146,28 @@ void App::drawUnitIcon(const UnitDef& def, sf::Vector2f c, float size, sf::Color
     sf::Color body(static_cast<sf::Uint8>(team.r * 0.45f), static_cast<sf::Uint8>(team.g * 0.45f),
                    static_cast<sf::Uint8>(team.b * 0.45f));
     if (def.isInfantry()) {
-        sf::CircleShape head(size * 0.2f);
-        head.setOrigin(size * 0.2f, size * 0.2f);
-        head.setPosition(c.x, c.y - size * 0.12f);
+        const bool helmet = def.id == "trooper";   // better infantry wears a helmet
+        if (helmet) {
+            sf::CircleShape dome(size * 0.23f);
+            dome.setOrigin(size * 0.23f, size * 0.23f);
+            dome.setPosition(c.x, c.y - size * 0.17f);
+            dome.setFillColor(a(sf::Color(78, 94, 62)));
+            dome.setOutlineColor(a(sf::Color(30, 40, 25)));
+            dome.setOutlineThickness(1.f);
+            window.draw(dome);
+        }
+        sf::CircleShape head(size * (helmet ? 0.15f : 0.2f));
+        head.setOrigin(head.getRadius(), head.getRadius());
+        head.setPosition(c.x, c.y - size * (helmet ? 0.08f : 0.12f));
         head.setFillColor(a(sf::Color(225, 200, 170)));
         window.draw(head);
+        if (helmet) {   // brim over the forehead
+            sf::RectangleShape brim({size * 0.5f, size * 0.06f});
+            brim.setOrigin(size * 0.25f, size * 0.03f);
+            brim.setPosition(c.x, c.y - size * 0.17f);
+            brim.setFillColor(a(sf::Color(60, 74, 48)));
+            window.draw(brim);
+        }
         sf::RectangleShape torso({size * 0.42f, size * 0.26f});
         torso.setOrigin(size * 0.21f, 0);
         torso.setPosition(c.x, c.y + size * 0.06f);
@@ -166,16 +183,21 @@ void App::drawUnitIcon(const UnitDef& def, sf::Vector2f c, float size, sf::Color
         hull.setOutlineColor(a(sf::Color(230, 230, 230)));
         hull.setOutlineThickness(1.f);
         window.draw(hull);
-        sf::CircleShape turret(size * 0.15f);
-        turret.setOrigin(size * 0.15f, size * 0.15f);
-        turret.setPosition(c.x, c.y + size * 0.05f);
-        turret.setFillColor(a(sf::Color(body.r + 40, body.g + 40, body.b + 40)));
-        window.draw(turret);
-        sf::RectangleShape barrel({size * 0.34f, size * 0.07f});
-        barrel.setOrigin(0, size * 0.035f);
+        // turret and gun grow with the armour class: light = small turret, heavy = big turret
+        const float armour = static_cast<float>(def.armour);
+        const float tr = size * (0.06f + 0.014f * armour);
+        sf::RectangleShape barrel({size * (0.20f + 0.025f * armour) + tr, size * (0.045f + 0.004f * armour)});
+        barrel.setOrigin(0, barrel.getSize().y / 2);
         barrel.setPosition(c.x, c.y + size * 0.05f);
         barrel.setFillColor(a(sf::Color(220, 220, 220)));
         window.draw(barrel);
+        sf::CircleShape turret(tr);
+        turret.setOrigin(tr, tr);
+        turret.setPosition(c.x, c.y + size * 0.05f);
+        turret.setFillColor(a(sf::Color(body.r + 40, body.g + 40, body.b + 40)));
+        turret.setOutlineColor(a(sf::Color(230, 230, 230)));
+        turret.setOutlineThickness(1.f);
+        window.draw(turret);
     }
 }
 
@@ -288,6 +310,9 @@ void App::runDemo(const std::string& dir) {
     bs->select(tank->id);
     bs->setHover(5, 7);
     frame("5_battle_move");
+    bs->toggleWeapon(0);
+    frame("5b_battle_weapon_range");
+    bs->toggleWeapon(0);
 
     // bring an enemy into range: move the tank next to an enemy for the attack preview
     bs->battle().moveUnit(*tank, 5, 5);

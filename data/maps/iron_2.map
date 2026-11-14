@@ -20,6 +20,9 @@ MMPPPPPPPPMM
 North Outpost,4,1,enemy,1
 East Outpost,9,5,enemy,1
 
+[triggers]
+flank,3,5,8,6
+
 [enemies]
 rifleman,4,2,hold
 trooper,3,2,hold
@@ -27,5 +30,5 @@ rifleman,5,2,hold
 trooper,9,6,hold
 rifleman,10,5,hold
 medium_tank,7,3,aggressive
-light_tank,6,4,aggressive
-light_tank,5,3,aggressive
+light_tank,6,4,aggressive,flank
+light_tank,5,3,aggressive,flank

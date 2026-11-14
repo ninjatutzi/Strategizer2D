@@ -85,25 +85,34 @@ void BattleScreen::log(const std::string& s, sf::Color c) {
 
 void BattleScreen::consumeEvents() {
     for (auto& e : battle_.takeEvents()) {
+        // fog of war: events that happen out of sight are not shown
+        bool seen = battle_.tileVisible(e.ax, e.ay, Side::Player) || battle_.tileVisible(e.bx, e.by, Side::Player);
         switch (e.kind) {
         case BattleEvent::Kind::Message:
             log(e.text, e.side == Side::Enemy ? col::Enemy : col::Text);
             break;
         case BattleEvent::Kind::Attack:
+            if (!seen) break;
             shots_.push_back({tileCenter(e.ax, e.ay), tileCenter(e.bx, e.by), sideColor(e.side), 0});
             popups_.push_back({"-" + std::to_string(e.damage), tileCenter(e.bx, e.by), e.side == Side::Player ? col::Accent : sf::Color(255, 120, 100), 0});
             log(e.text, sideColor(e.side));
             break;
         case BattleEvent::Kind::Move:
-            shots_.push_back({tileCenter(e.ax, e.ay), tileCenter(e.bx, e.by), withAlpha(sideColor(e.side), 150), 0});
+            if (seen) shots_.push_back({tileCenter(e.ax, e.ay), tileCenter(e.bx, e.by), withAlpha(sideColor(e.side), 150), 0});
             break;
         case BattleEvent::Kind::Capture:
+            if (!seen && e.side == Side::Enemy) break;
             popups_.push_back({"Eingenommen", tileCenter(e.ax, e.ay), sideColor(e.side), 0});
             log(e.text, sideColor(e.side));
             break;
         case BattleEvent::Kind::Death:
+            if (!seen) break;
             popups_.push_back({"Zerstört", tileCenter(e.ax, e.ay), sf::Color(255, 255, 255), 0});
             log(e.text, sideColor(e.side));
+            break;
+        case BattleEvent::Kind::Spawn:
+            popups_.push_back({"Hinterhalt!", tileCenter(e.ax, e.ay), sf::Color(255, 120, 100), 0});
+            log(e.text, col::Enemy);
             break;
         }
     }
@@ -111,10 +120,7 @@ void BattleScreen::consumeEvents() {
 
 void BattleScreen::select(int id) {
     selectedId_ = id;
-    selectedWeapon_ = 0;
-    if (const Unit* u = selected())
-        for (int i = 0; i < static_cast<int>(u->def->weapons.size()); ++i)
-            if (battle_.weaponReady(*u, i)) { selectedWeapon_ = i; break; }
+    selectedWeapon_ = -1;   // no weapon selected by default: range is only shown on demand
     refreshSelection();
 }
 
@@ -127,12 +133,15 @@ void BattleScreen::refreshSelection() {
 }
 
 void BattleScreen::afterAction() {
-    if (const Unit* u = selected()) {
-        if (!battle_.weaponReady(*u, selectedWeapon_))
-            for (int i = 0; i < static_cast<int>(u->def->weapons.size()); ++i)
-                if (battle_.weaponReady(*u, i)) { selectedWeapon_ = i; break; }
-    }
+    const Unit* u = selected();
+    if (!u || !battle_.weaponReady(*u, selectedWeapon_) || u->attacksLeft <= 0) selectedWeapon_ = -1;
     refreshSelection();
+}
+
+void BattleScreen::toggleWeapon(int i) {
+    const Unit* u = selected();
+    if (!u || u->side != Side::Player || i < 0 || i >= static_cast<int>(u->def->weapons.size())) return;
+    selectedWeapon_ = selectedWeapon_ == i ? -1 : i;
 }
 
 void BattleScreen::selectNextReady() {
@@ -142,7 +151,7 @@ void BattleScreen::selectNextReady() {
     for (size_t i = 0; i < us.size(); ++i) if (us[i].id == selectedId_) start = static_cast<int>(i) + 1;
     for (size_t k = 0; k < us.size(); ++k) {
         const Unit& u = us[(start + k) % us.size()];
-        if (u.alive && u.side == Side::Player && u.actionsLeft > 0) { select(u.id); return; }
+        if (u.alive && u.side == Side::Player && (u.attacksLeft > 0 || battle_.canMove(u))) { select(u.id); return; }
     }
 }
 
@@ -188,19 +197,22 @@ void BattleScreen::onKey(sf::Keyboard::Key k) {
                        [&](const Campaign& c) { return c.id == mission_.campaign; })));
         return;
     }
-    if (k == sf::Keyboard::Escape) {
-        selectedId_ = -1;
-        deployDef_ = nullptr;
-        reach_.clear();
+    if (k == sf::Keyboard::Q) {
+        selectedWeapon_ = -1;
+    } else if (k == sf::Keyboard::Escape) {
+        if (selectedWeapon_ >= 0) selectedWeapon_ = -1;
+        else {
+            selectedId_ = -1;
+            deployDef_ = nullptr;
+            reach_.clear();
+        }
     } else if (k == sf::Keyboard::Space || k == sf::Keyboard::Enter) {
         if (ph == Phase::Deploy) startBattle();
         else if (ph == Phase::PlayerTurn) endTurn();
     } else if (k == sf::Keyboard::Tab && ph == Phase::PlayerTurn) {
         selectNextReady();
     } else if (k >= sf::Keyboard::Num1 && k <= sf::Keyboard::Num5) {
-        const Unit* u = selected();
-        int i = k - sf::Keyboard::Num1;
-        if (u && u->side == Side::Player && i < static_cast<int>(u->def->weapons.size())) selectedWeapon_ = i;
+        toggleWeapon(k - sf::Keyboard::Num1);
     }
 }
 
@@ -248,8 +260,7 @@ void BattleScreen::onLeftClick(sf::Vector2f m) {
     if (endBtn_.contains(m)) { endTurn(); return; }
     for (size_t i = 0; i < weaponRects_.size(); ++i)
         if (weaponRects_[i].contains(m)) {
-            const Unit* u = selected();
-            if (u && u->side == Side::Player) selectedWeapon_ = static_cast<int>(i);
+            toggleWeapon(static_cast<int>(i));
             return;
         }
     if (onBoard) clickBoard(tx, ty);
@@ -261,13 +272,16 @@ void BattleScreen::clickBoard(int tx, int ty) {
     Unit* t = battle_.unitAt(tx, ty);
     if (t && !battle_.visibleTo(*t, Side::Player)) t = nullptr;
 
-    if (own && t && t->side == Side::Enemy && battle_.canAttack(*sel, selectedWeapon_, *t)) {
-        battle_.attack(*sel, selectedWeapon_, *t);
-        consumeEvents();
-        afterAction();
-        return;
-    }
-    if (own && !t && battle_.canMove(*sel) && !reach_.empty() && reach_[ty * battle_.width() + tx] >= 0) {
+    if (own && selectedWeapon_ >= 0) {
+        // weapon mode: clicking a target in range fires, clicking empty ground leaves weapon mode
+        if (t && t->side == Side::Enemy && battle_.canAttack(*sel, selectedWeapon_, *t)) {
+            battle_.attack(*sel, selectedWeapon_, *t);
+            consumeEvents();
+            afterAction();
+            return;
+        }
+        if (!t) { selectedWeapon_ = -1; return; }
+    } else if (own && !t && battle_.canMove(*sel) && !reach_.empty() && reach_[ty * battle_.width() + tx] >= 0) {
         battle_.moveUnit(*sel, tx, ty);
         consumeEvents();
         afterAction();
@@ -275,6 +289,7 @@ void BattleScreen::clickBoard(int tx, int ty) {
     }
     if (t) { select(t->id); return; }
     selectedId_ = -1;
+    selectedWeapon_ = -1;
     reach_.clear();
 }
 
@@ -396,7 +411,7 @@ void BattleScreen::drawUnits() {
         if (!u.alive || !battle_.visibleTo(u, Side::Player)) continue;
         sf::Vector2f c = tileCenter(u.x, u.y);
         sf::Vector2f o = tileOrigin(u.x, u.y);
-        bool exhausted = ph == Phase::PlayerTurn && u.side == Side::Player && u.actionsLeft == 0;
+        bool exhausted = ph == Phase::PlayerTurn && u.side == Side::Player && u.attacksLeft == 0 && !battle_.canMove(u);
         app.drawUnitIcon(*u.def, {c.x, c.y - 2}, kTile * 0.74f, sideColor(u.side), exhausted ? 0.5f : 1.f);
         if (u.def->has("camouflage")) app.text("\xE2\x97\x8C", o.x + 2, o.y + kTile - 20, 12, col::TextDim);
         drawBar(o.x + 5, o.y + kTile - 8, kTile - 10, 5, static_cast<float>(u.hp) / u.def->hp, hpColor(static_cast<float>(u.hp) / u.def->hp));
@@ -457,28 +472,40 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
     }
     for (auto& b : battle_.buildings()) drawBuilding(b);
 
-    // selection overlays
+    // fog of war (not during deployment so the whole map can be studied)
+    if (ph != Phase::Deploy) {
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x)
+                if (!battle_.tileVisible(x, y, Side::Player)) {
+                    auto o = tileOrigin(x, y);
+                    app.rect({o.x, o.y, kTile, kTile}, sf::Color(8, 10, 22, 150));
+                }
+    }
+
+    // selection overlays: movement range OR (when a weapon is selected) weapon range - never both
     const Unit* sel = selected();
     if (sel && sel->alive) {
         bool own = sel->side == Side::Player;
-        for (int y = 0; y < H; ++y)
-            for (int x = 0; x < W; ++x)
-                if (!reach_.empty() && reach_[y * W + x] >= 0) {
-                    auto o = tileOrigin(x, y);
-                    app.rect({o.x, o.y, kTile, kTile}, withAlpha(own ? col::Player : col::Enemy, own ? 100 : 60),
-                             withAlpha(own ? col::Player : col::Enemy, 200), 1.f);
-                }
-        if (own && ph == Phase::PlayerTurn && sel->actionsLeft > 0 && battle_.weaponReady(*sel, selectedWeapon_)) {
+        bool weaponMode = own && selectedWeapon_ >= 0;
+        if (!weaponMode && !reach_.empty())
+            for (int y = 0; y < H; ++y)
+                for (int x = 0; x < W; ++x)
+                    if (reach_[y * W + x] >= 0) {
+                        auto o = tileOrigin(x, y);
+                        app.rect({o.x, o.y, kTile, kTile}, withAlpha(own ? col::Player : col::Enemy, own ? 100 : 60),
+                                 withAlpha(own ? col::Player : col::Enemy, 200), 1.f);
+                    }
+        if (weaponMode && ph == Phase::PlayerTurn) {
             int range = sel->def->weapons[selectedWeapon_].range;
             for (int y = 0; y < H; ++y)
                 for (int x = 0; x < W; ++x) {
                     int d = std::abs(x - sel->x) + std::abs(y - sel->y);
                     if (d < 1 || d > range) continue;
                     auto o = tileOrigin(x, y);
-                    app.rect({o.x, o.y, kTile, kTile}, sf::Color(255, 150, 40, 40), sf::Color(255, 150, 40, 150), 1.f);
+                    app.rect({o.x, o.y, kTile, kTile}, sf::Color(255, 150, 40, 55), sf::Color(255, 150, 40, 170), 1.f);
                 }
             for (auto& u : battle_.units())
-                if (u.alive && u.side == Side::Enemy && battle_.canAttack(*sel, selectedWeapon_, u)) {
+                if (u.present() && u.side == Side::Enemy && battle_.canAttack(*sel, selectedWeapon_, u)) {
                     auto o = tileOrigin(u.x, u.y);
                     app.rect({o.x, o.y, kTile, kTile}, sf::Color(255, 40, 40, 90), sf::Color(255, 60, 60), 3.f);
                 }
@@ -494,7 +521,7 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
     drawEffects();
 
     // damage preview tooltip
-    if (sel && sel->side == Side::Player && hx_ >= 0 && ph == Phase::PlayerTurn) {
+    if (sel && sel->side == Side::Player && selectedWeapon_ >= 0 && hx_ >= 0 && ph == Phase::PlayerTurn) {
         const Unit* t = battle_.unitAt(hx_, hy_);
         if (t && t->side == Side::Enemy && battle_.visibleTo(*t, Side::Player) && battle_.canAttack(*sel, selectedWeapon_, *t)) {
             int dmg = battle_.previewDamage(*sel, selectedWeapon_, *t);
@@ -555,7 +582,7 @@ void BattleScreen::drawUnitCard(const UnitDef& d, const Unit* u, float x, float 
         app.rect({x + 56 + i * 16.f, cy + 1, 12, 12}, i < will ? sf::Color(120, 170, 255) : sf::Color(55, 60, 75));
     if (u && will <= 0) app.text("gebrochen: kann sich nicht bewegen", x + 62 + d.will * 16.f, cy - 2, 12, sf::Color(255, 120, 100));
     cy += 24;
-    app.text("Rüstung " + std::to_string(d.armour) + "     Schritte " + std::to_string(d.move) + "     Kosten " + std::to_string(d.cost),
+    app.text("Rüstung " + std::to_string(d.armour) + "   Bewegung " + std::to_string(d.move) + "   Sicht " + std::to_string(d.vision) + "   Kosten " + std::to_string(d.cost),
              x, cy, 14, col::Text);
     cy += 22;
     if (!d.attributes.empty()) {
@@ -618,8 +645,8 @@ void BattleScreen::drawDeployPanel(sf::Vector2f mouse) {
         app.text(d.name, r.left + 62, r.top + 4, 17, tc, true);
         std::string cost = std::to_string(d.cost);
         app.text(cost, r.left + r.width - 12 - app.textWidth(cost, 18, true), r.top + 4, 18, affordable ? col::Accent : col::Enemy, true);
-        app.text("HP " + std::to_string(d.hp) + "   Moral " + std::to_string(d.will) + "   Rüstung " + std::to_string(d.armour) +
-                     "   Schritte " + std::to_string(d.move), r.left + 62, r.top + 26, 12, col::TextDim);
+        app.text("HP " + std::to_string(d.hp) + "  Moral " + std::to_string(d.will) + "  Rüst. " + std::to_string(d.armour) +
+                     "  Bew. " + std::to_string(d.move) + "  Sicht " + std::to_string(d.vision), r.left + 62, r.top + 26, 12, col::TextDim);
         if (!d.attributes.empty()) app.text(attrList(d), r.left + 62, r.top + 40, 12, col::Accent);
     }
     if (units.size() > kDeployRows) {
@@ -655,8 +682,9 @@ void BattleScreen::drawBattlePanel(sf::Vector2f mouse) {
         drawUnitCard(*sel->def, sel, kInnerX, y, kInnerW, true, mouse);
     } else {
         app.text("Keine Truppe ausgewählt", kInnerX, y, 18, col::TextDim);
-        app.paragraph("Klicke auf eine deiner Truppen. Blaue Felder = Bewegung, orange = Reichweite der Waffe, rot = angreifbar. "
-                      "Jede Truppe darf pro Runde bewegen ODER angreifen. Tab = nächste Truppe.",
+        app.paragraph("Klicke auf eine deiner Truppen: blaue Felder = Bewegung. Wähle eine Waffe (Klick oder 1-5), um ihre "
+                      "Reichweite zu sehen (orange), rot = angreifbar. Q / Esc wählt die Waffe ab. Jede Truppe darf pro Runde "
+                      "bewegen UND angreifen. Gegner außerhalb deiner Sicht sind im Nebel verborgen. Tab = nächste Truppe.",
                       kInnerX, y + 30, kInnerW, 13);
     }
 

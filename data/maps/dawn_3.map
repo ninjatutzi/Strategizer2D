@@ -20,6 +20,9 @@ PPPPPPPPPPPP
 Hill 42,2,2,enemy,1
 Bunker,9,2,enemy,1
 
+[triggers]
+tank,3,5,8,6
+
 [enemies]
 rifleman,1,2,hold
 rifleman,3,2,hold
@@ -27,5 +30,5 @@ trooper,2,3,hold
 rifleman,8,2,hold
 trooper,10,2,hold
 rifleman,9,3,hold
-light_tank,6,2,aggressive
-trooper,5,4,aggressive
+light_tank,6,2,aggressive,tank
+trooper,5,4,aggressive,tank

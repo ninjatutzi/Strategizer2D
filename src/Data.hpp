@@ -33,12 +33,13 @@ struct UnitDef {
     std::string id, name, sprite;
     UnitClass cls = UnitClass::Infantry;
     int hp = 1, will = 5, armour = 0, move = 1, cost = 0;
+    int vision = 4;                   // fog of war: tiles (Manhattan) this unit can see
     std::vector<std::string> attributes;
     std::vector<WeaponDef> weapons;   // up to cfg::MaxWeapons
 
     bool has(const std::string& attr) const;
     bool isInfantry() const { return cls == UnitClass::Infantry; }
-    int maxActions() const { return has("double_attack") ? 2 : 1; }
+    int maxAttacks() const { return has("double_attack") ? 2 : 1; }
     std::string abbrev() const;       // short label for units without a sprite
 };
 

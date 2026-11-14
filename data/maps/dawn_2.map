@@ -16,11 +16,17 @@ PPPPPPPPPPPP
 [deploy]
 1,9,10,11
 
+[triggers]
+# group,x0,y0,x1,y1   (touching ANY tile of a group spawns the whole group)
+ambush,8,6,10,7
+
 [enemies]
+# unit_id,x,y,behavior[,group]   units with a group stay hidden until it is triggered
 rifleman,2,3,aggressive
 rifleman,9,4,aggressive
 rifleman,4,5,hold
 rifleman,8,5,hold
 trooper,6,3,aggressive
 trooper,3,4,hold
-trooper,10,3,aggressive
+trooper,10,3,aggressive,ambush
+rifleman,9,2,aggressive,ambush

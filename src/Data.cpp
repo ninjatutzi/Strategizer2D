@@ -123,6 +123,8 @@ void GameData::load(const std::string& rootDir) {
         u.armour = row.requireInt("armour");
         u.move = row.requireInt("move");
         u.cost = row.requireInt("cost");
+        u.vision = row.intOr("vision", u.cls == UnitClass::Infantry ? 5 : 4);
+        if (u.vision < 1) row.fail("vision must be >= 1");
         if (u.hp < 1) row.fail("hp must be >= 1");
         if (u.armour < 0) row.fail("armour must be >= 0");
         if (u.armour > 0 && u.cls == UnitClass::Infantry)
