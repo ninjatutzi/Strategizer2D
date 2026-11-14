@@ -1,0 +1,16 @@
+# Units. Edit freely - the game reads this file on every start.
+# class      : infantry | vehicle   (infantry must have armour 0 and can capture buildings)
+# hp         : hit points
+# will       : willpower. At 0 the unit cannot move in its next turn; it is restored after that turn
+# armour     : 0 = unarmoured (see damage formulas in README.md)
+# move       : movement points per turn (terrain costs apply)
+# cost       : deployment cost
+# attributes : separated by | ; known: radio | double_attack | camouflage
+# sprite     : image in assets/units/ (optional, default <id>.png; a fallback is drawn if missing)
+# weapon1-5  : ids from weapons.csv
+id,name,class,hp,will,armour,move,cost,attributes,sprite,weapon1,weapon2,weapon3,weapon4,weapon5
+rifleman,Rifleman,infantry,50,5,0,3,10,,rifleman.png,rifle,,,,
+trooper,Trooper,infantry,75,6,0,3,20,camouflage,trooper.png,assault_rifle,grenade,,,
+light_tank,Light Tank,vehicle,100,5,4,5,40,double_attack,light_tank.png,light_cannon,light_mg,,,
+medium_tank,Medium Tank,vehicle,140,5,7,4,70,,medium_tank.png,medium_cannon,coax_mg,,,
+heavy_tank,Heavy Tank,vehicle,200,5,10,3,110,,heavy_tank.png,heavy_cannon,coax_mg,,,

@@ -1,0 +1,31 @@
+# Hill 42
+[tiles]
+PPPMMPPPPMPP
+PPHHMPPPHHPP
+PHHHPPPHHHPP
+PHHPPPPPHFPP
+PPPPFFPPPPPP
+PPPPFPPPPPPP
+PPPPPPPPFFPP
+PFPPPPPPPFPP
+PPPPPPRRPPPP
+PPPPPPPPPPPP
+PPPPPPPPPPPP
+PPPPPPPPPPPP
+
+[deploy]
+1,9,10,11
+
+[buildings]
+Hill 42,2,2,enemy,1
+Bunker,9,2,enemy,1
+
+[enemies]
+rifleman,1,2,hold
+rifleman,3,2,hold
+trooper,2,3,hold
+rifleman,8,2,hold
+trooper,10,2,hold
+rifleman,9,3,hold
+light_tank,6,2,aggressive
+trooper,5,4,aggressive

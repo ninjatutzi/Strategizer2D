@@ -1,0 +1,26 @@
+# Armoured Push
+[tiles]
+PPPPPPPPPPPP
+PPPPFFPPPPPP
+PPHPPFPPPPHP
+PPHHPPPPPHHP
+PPPPPPPPPPPP
+PPPFPPPPFPPP
+PPPFPPPPFPPP
+PPPPPPPPPPPP
+PPHHPPPPHHPP
+PPPPPPPPPPPP
+PPPPPPPPPPPP
+PPPPPPPPPPPP
+
+[deploy]
+1,9,10,11
+
+[enemies]
+medium_tank,5,1,aggressive
+medium_tank,7,1,aggressive
+light_tank,3,2,aggressive
+light_tank,9,2,aggressive
+trooper,4,3,hold
+trooper,8,3,hold
+heavy_tank,6,0,hold

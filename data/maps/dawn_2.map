@@ -1,0 +1,26 @@
+# River Crossing
+[tiles]
+PPPPPPPPPPPP
+PPFFPPPPFFPP
+PPFPPPPPPFPP
+PPPPPPHPPPPP
+PPPPPPPPPPPP
+PPPPPPPPPPPP
+RRRPRRRRRPRR
+PPPPPPPPPPPP
+PFPPPPPPPFPP
+PPPPPPPPPPPP
+PPPPPPPPPPPP
+PPPPPPPPPPPP
+
+[deploy]
+1,9,10,11
+
+[enemies]
+rifleman,2,3,aggressive
+rifleman,9,4,aggressive
+rifleman,4,5,hold
+rifleman,8,5,hold
+trooper,6,3,aggressive
+trooper,3,4,hold
+trooper,10,3,aggressive
