@@ -423,6 +423,8 @@ void App::runDemo(const std::string& dir) {
         b.unitAt(3, 10)->hp = 100;
         b.unitAt(3, 10)->fuel = 0;
         bs->select(b.unitAt(6, 10)->id);
+        b.unitAt(8, 10)->ammo[0] = 0; b.unitAt(8, 10)->ammo[1] = 0;   // light tank: no ammo, low fuel
+        b.unitAt(4, 10)->moved = true;                                // medic already moved
         bs->toggleWeapon(0);
         bs->setHover(5, 10);
         frame("10_ambulance_heal");

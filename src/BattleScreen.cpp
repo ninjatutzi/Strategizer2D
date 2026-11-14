@@ -583,6 +583,53 @@ void BattleScreen::drawBadge(float x, float y, char letter, sf::Color fill, bool
     }
 }
 
+// Round status icon: kind 0 = can move (arrow), 1 = can attack (crosshair), 2 = support ready (cross),
+// 3 = out of ammo (M, struck through), 4 = out of fuel (F, struck through)
+void BattleScreen::drawStatusBadge(float x, float y, int kind, sf::Color fill) {
+    auto& w = app.window;
+    sf::CircleShape c(7.f);
+    c.setOrigin(7.f, 7.f);
+    c.setPosition(x, y);
+    c.setFillColor(fill);
+    c.setOutlineColor(sf::Color(10, 10, 14, 230));
+    c.setOutlineThickness(1.f);
+    w.draw(c);
+    auto bar = [&](float len, float th, float angle, sf::Color col) {
+        sf::RectangleShape r({len, th});
+        r.setOrigin(len / 2, th / 2);
+        r.setPosition(x, y);
+        r.setRotation(angle);
+        r.setFillColor(col);
+        w.draw(r);
+    };
+    if (kind == 0) {   // arrow pointing right
+        sf::ConvexShape t(3);
+        t.setPoint(0, {x - 3.f, y - 4.f});
+        t.setPoint(1, {x + 4.5f, y});
+        t.setPoint(2, {x - 3.f, y + 4.f});
+        t.setFillColor(sf::Color::White);
+        w.draw(t);
+    } else if (kind == 1) {   // crosshair
+        sf::CircleShape ring(3.f);
+        ring.setOrigin(3.f, 3.f);
+        ring.setPosition(x, y);
+        ring.setFillColor(sf::Color::Transparent);
+        ring.setOutlineColor(sf::Color::White);
+        ring.setOutlineThickness(1.3f);
+        w.draw(ring);
+        bar(12.f, 1.3f, 0.f, sf::Color::White);
+        bar(12.f, 1.3f, 90.f, sf::Color::White);
+    } else if (kind == 2) {   // plus
+        bar(9.f, 2.4f, 0.f, sf::Color::White);
+        bar(9.f, 2.4f, 90.f, sf::Color::White);
+    } else {   // 3 / 4: letter with a strike-through
+        std::string t(1, kind == 3 ? 'M' : 'F');
+        float tw = app.textWidth(t, 10, true);
+        app.text(t, x - tw / 2, y - 8, 10, sf::Color::White, true);
+        bar(17.f, 2.f, -45.f, sf::Color(255, 235, 120));
+    }
+}
+
 void BattleScreen::drawUnits() {
     Phase ph = battle_.phase();
     for (auto& u : battle_.units()) {
@@ -603,6 +650,25 @@ void BattleScreen::drawUnits() {
         if (u.def->has("camouflage")) badge('T', sf::Color(90, 110, 80));
         if (u.def->has("radio")) badge('R', sf::Color(60, 110, 200));
         if (u.def->has("double_attack")) badge('2', sf::Color(190, 110, 30));
+        // bottom-right: what this unit can still do this turn (icons disappear once the action is used up)
+        if (ph == Phase::PlayerTurn && u.side == Side::Player) {
+            float sx = o.x + kTile - 9, sy = o.y + kTile - 19;
+            auto status = [&](int kind, sf::Color c) { drawStatusBadge(sx, sy, kind, c); sx -= 16; };
+            if (battle_.canMove(u)) status(0, sf::Color(50, 110, 220));
+            else if (!u.moved && u.def->fuel > 0 && u.fuel == 0) status(4, sf::Color(200, 45, 40));   // wants to move but has no fuel
+            if (u.attacksLeft > 0) {
+                bool ready = false, allSupport = true, empty = false;
+                for (int i = 0; i < static_cast<int>(u.def->weapons.size()); ++i) {
+                    if (u.ammo[i] == 0) empty = true;
+                    if (battle_.weaponReady(u, i)) {
+                        ready = true;
+                        if (!u.def->weapons[i].isSupport()) allSupport = false;
+                    }
+                }
+                if (ready) status(allSupport ? 2 : 1, allSupport ? sf::Color(40, 160, 80) : sf::Color(215, 110, 30));
+                else if (empty) status(3, sf::Color(200, 45, 40));   // can attack in principle, but no ammo
+            }
+        }
         if (u.id == selectedId_) {
             app.rect({o.x, o.y, kTile, kTile}, sf::Color::Transparent, col::Accent, 3.f);
         }
