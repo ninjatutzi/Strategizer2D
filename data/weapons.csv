@@ -1,0 +1,18 @@
+# Weapons. Units reference these ids in units.csv (weapon1 ... weapon5).
+# range       : attack range in tiles (Manhattan distance)
+# damage      : base damage
+# ap          : armour piercing (only matters against armour > 0)
+# will_damage : willpower removed from the target per hit
+# cooldown    : turns the weapon cannot be used after firing (0 = none)
+# needs_radio : 1 = can only be used while a friendly unit with the attribute "radio" is alive
+id,name,range,damage,ap,will_damage,cooldown,needs_radio
+rifle,Rifle,3,15,1,1,0,0
+assault_rifle,Assault Rifle,3,20,1,1,0,0
+grenade,Grenade,2,30,2,2,2,0
+light_cannon,Light Cannon,3,25,2,1,0,0
+light_mg,Machine Gun,2,12,1,2,0,0
+medium_cannon,Medium Cannon,4,45,3,2,0,0
+heavy_cannon,Heavy Cannon,4,70,4,3,1,0
+coax_mg,Coaxial MG,2,12,1,2,0,0
+# Example for later (artillery needs a radio operator):
+# mortar,Mortar,6,50,2,3,1,1

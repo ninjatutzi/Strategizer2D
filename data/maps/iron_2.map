@@ -1,0 +1,31 @@
+# Mountain Pass
+[tiles]
+MMMPPPPPPMMM
+MMPPPFFPPPMM
+MPPPPPPPPPPM
+MMMPPHHPPMMM
+MMMPPPPPPMMM
+PPPPPRRPPPPP
+PPPPPRRPPPPP
+MMPPPPPPPPMM
+MMPPFPPFPPMM
+MPPPPPPPPPPM
+MPPPPPPPPPPM
+MMPPPPPPPPMM
+
+[deploy]
+2,9,9,11
+
+[buildings]
+North Outpost,4,1,enemy,1
+East Outpost,9,5,enemy,1
+
+[enemies]
+rifleman,4,2,hold
+trooper,3,2,hold
+rifleman,5,2,hold
+trooper,9,6,hold
+rifleman,10,5,hold
+medium_tank,7,3,aggressive
+light_tank,6,4,aggressive
+light_tank,5,3,aggressive

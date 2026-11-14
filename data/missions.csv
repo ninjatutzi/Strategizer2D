@@ -1,0 +1,10 @@
+# objective : capture (take all objective buildings) | eliminate (destroy all enemies)
+#             in both cases wiping out all enemies wins the mission
+# budget    : points the player can spend while deploying
+# max_turns : 0 = unlimited
+id,campaign,name,description,objective,map,budget,max_turns
+dawn_1,dawn,Outpost Alpha,"Nimm den feindlichen Außenposten ein. Nur Infanterie kann Gebäude einnehmen.",capture,dawn_1.map,60,12
+dawn_2,dawn,River Crossing,"Überquere den Fluss an den Furten und vernichte die Verteidiger.",eliminate,dawn_2.map,90,0
+dawn_3,dawn,Hill 42,"Erobere den befestigten Hügel und den Bunker. Vorsicht vor dem leichten Panzer.",capture,dawn_3.map,130,14
+iron_1,iron,Armoured Push,"Offenes Gelände. Zerschlage die gegnerische Panzerkolonne.",eliminate,iron_1.map,220,0
+iron_2,iron,Mountain Pass,"Nimm beide Außenposten ein. Fahrzeuge können keine Berge überqueren.",capture,iron_2.map,240,16

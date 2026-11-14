@@ -1,0 +1,555 @@
+#include "Battle.hpp"
+
+#include <algorithm>
+#include <climits>
+#include <cmath>
+#include <fstream>
+#include <queue>
+#include <stdexcept>
+
+#include "Csv.hpp"
+
+int computeDamage(const WeaponDef& w, int defenderArmour, float terrainMult) {
+    float dmg;
+    if (defenderArmour <= 0) dmg = w.damage * terrainMult;
+    else dmg = (w.damage * w.ap / static_cast<float>(defenderArmour)) * terrainMult;
+    int result = static_cast<int>(std::lround(dmg));
+    if (result < 1 && dmg > 0.f) result = 1;
+    return result;
+}
+
+// ---------------------------------------------------------------------------------
+// Map loading
+// ---------------------------------------------------------------------------------
+Battle::Battle(const GameData& data, const Mission& mission) : data_(data), mission_(mission) {
+    loadMap(data.root() + "/data/maps/" + mission.mapFile);
+}
+
+void Battle::loadMap(const std::string& path) {
+    std::ifstream in(path);
+    if (!in) throw std::runtime_error("cannot open map " + path);
+
+    auto fail = [&](int line, const std::string& msg) {
+        throw std::runtime_error(path + ":" + std::to_string(line) + ": " + msg);
+    };
+
+    std::string section, raw;
+    int lineNo = 0;
+    std::vector<std::string> rows;
+    int nextUnitId = 1;
+    while (std::getline(in, raw)) {
+        ++lineNo;
+        if (!raw.empty() && raw.back() == '\r') raw.pop_back();
+        std::string line = trim(raw);
+        if (line.empty() || line[0] == '#') continue;
+        if (line[0] == '[') {
+            section = toLower(line);
+            continue;
+        }
+        if (section == "[tiles]") {
+            if (static_cast<int>(line.size()) != cfg::MapSize)
+                fail(lineNo, "tile row must have exactly " + std::to_string(cfg::MapSize) + " characters");
+            rows.push_back(line);
+        } else if (section == "[deploy]") {
+            auto p = split(line, ',');
+            if (p.size() != 4) fail(lineNo, "deploy line must be x0,y0,x1,y1");
+            int v[4];
+            for (int i = 0; i < 4; ++i) v[i] = std::atoi(trim(p[i]).c_str());
+            for (int y = v[1]; y <= v[3]; ++y)
+                for (int x = v[0]; x <= v[2]; ++x) {
+                    if (!inBounds(x, y)) fail(lineNo, "deploy zone outside the map");
+                    deployZone_.emplace_back(x, y);
+                }
+        } else if (section == "[buildings]") {
+            auto p = split(line, ',');
+            if (p.size() < 4) fail(lineNo, "building line must be name,x,y,owner[,objective]");
+            Building b;
+            b.name = trim(p[0]);
+            b.x = std::atoi(trim(p[1]).c_str());
+            b.y = std::atoi(trim(p[2]).c_str());
+            std::string o = toLower(trim(p[3]));
+            b.owner = o == "player" ? Side::Player : o == "enemy" ? Side::Enemy : Side::Neutral;
+            b.objective = p.size() < 5 || trim(p[4]) != "0";
+            if (!inBounds(b.x, b.y)) fail(lineNo, "building outside the map");
+            buildings_.push_back(b);
+        } else if (section == "[enemies]") {
+            auto p = split(line, ',');
+            if (p.size() < 3) fail(lineNo, "enemy line must be unit_id,x,y[,aggressive|hold]");
+            const UnitDef* def = data_.unit(toLower(trim(p[0])));
+            if (!def) fail(lineNo, "unknown unit '" + trim(p[0]) + "'");
+            Unit u;
+            u.id = nextUnitId++;
+            u.def = def;
+            u.side = Side::Enemy;
+            u.x = std::atoi(trim(p[1]).c_str());
+            u.y = std::atoi(trim(p[2]).c_str());
+            u.hp = def->hp;
+            u.will = def->will;
+            u.holdPosition = p.size() > 3 && toLower(trim(p[3])) == "hold";
+            if (!inBounds(u.x, u.y)) fail(lineNo, "enemy outside the map");
+            units_.push_back(u);
+        } else {
+            fail(lineNo, "line outside of a known section ([tiles] [deploy] [buildings] [enemies])");
+        }
+    }
+    nextId_ = nextUnitId;
+
+    if (static_cast<int>(rows.size()) != cfg::MapSize)
+        throw std::runtime_error(path + ": map needs exactly " + std::to_string(cfg::MapSize) + " tile rows, found " +
+                                 std::to_string(rows.size()));
+    tiles_.resize(cfg::MapSize * cfg::MapSize);
+    for (int y = 0; y < cfg::MapSize; ++y)
+        for (int x = 0; x < cfg::MapSize; ++x) {
+            const Terrain* t = data_.terrainBySymbol(rows[y][x]);
+            if (!t) throw std::runtime_error(path + ": unknown terrain symbol '" + std::string(1, rows[y][x]) +
+                                             "' at x=" + std::to_string(x) + " y=" + std::to_string(y));
+            tiles_[y * width() + x] = t;
+        }
+
+    // validation
+    if (deployZone_.empty()) throw std::runtime_error(path + ": [deploy] zone is empty");
+    for (auto& u : units_) {
+        if (terrainAt(u.x, u.y).moveCost(u.def->cls) == 0)
+            throw std::runtime_error(path + ": enemy '" + u.def->id + "' placed on impassable terrain");
+        for (auto& o : units_)
+            if (&o != &u && o.x == u.x && o.y == u.y)
+                throw std::runtime_error(path + ": two enemies on tile " + std::to_string(u.x) + "," + std::to_string(u.y));
+    }
+    if (mission_.objective == Objective::Capture &&
+        std::none_of(buildings_.begin(), buildings_.end(), [](const Building& b) { return b.objective; }))
+        throw std::runtime_error(path + ": capture mission needs at least one objective building");
+}
+
+// ---------------------------------------------------------------------------------
+// Queries
+// ---------------------------------------------------------------------------------
+const Building* Battle::buildingAt(int x, int y) const {
+    for (auto& b : buildings_) if (b.x == x && b.y == y) return &b;
+    return nullptr;
+}
+
+Unit* Battle::unitAt(int x, int y) {
+    for (auto& u : units_) if (u.alive && u.x == x && u.y == y) return &u;
+    return nullptr;
+}
+const Unit* Battle::unitAt(int x, int y) const {
+    for (auto& u : units_) if (u.alive && u.x == x && u.y == y) return &u;
+    return nullptr;
+}
+Unit* Battle::unitById(int id) {
+    for (auto& u : units_) if (u.id == id) return &u;
+    return nullptr;
+}
+const Unit* Battle::unitById(int id) const {
+    for (auto& u : units_) if (u.id == id) return &u;
+    return nullptr;
+}
+
+int Battle::aliveCount(Side s) const {
+    return static_cast<int>(std::count_if(units_.begin(), units_.end(),
+                                          [&](const Unit& u) { return u.alive && u.side == s; }));
+}
+
+int Battle::manhattan(int ax, int ay, int bx, int by) const { return std::abs(ax - bx) + std::abs(ay - by); }
+
+bool Battle::visibleTo(const Unit& target, Side viewer) const {
+    if (target.side == viewer || !target.def->has("camouflage")) return true;
+    for (auto& u : units_)
+        if (u.alive && u.side == viewer && manhattan(u.x, u.y, target.x, target.y) <= cfg::CamoRevealRange)
+            return true;
+    return false;
+}
+
+bool Battle::hasRadio(Side s) const {
+    return std::any_of(units_.begin(), units_.end(),
+                       [&](const Unit& u) { return u.alive && u.side == s && u.def->has("radio"); });
+}
+
+std::vector<BattleEvent> Battle::takeEvents() {
+    std::vector<BattleEvent> out;
+    out.swap(events_);
+    return out;
+}
+
+void Battle::message(const std::string& text, Side s) {
+    BattleEvent e;
+    e.kind = BattleEvent::Kind::Message;
+    e.text = text;
+    e.side = s;
+    emit(e);
+}
+
+// ---------------------------------------------------------------------------------
+// Deployment
+// ---------------------------------------------------------------------------------
+bool Battle::inDeployZone(int x, int y) const {
+    return std::find(deployZone_.begin(), deployZone_.end(), std::make_pair(x, y)) != deployZone_.end();
+}
+
+int Battle::budgetLeft() const {
+    int spent = 0;
+    for (auto& u : units_) if (u.alive && u.side == Side::Player) spent += u.def->cost;
+    return mission_.budget - spent;
+}
+
+bool Battle::canDeploy(const UnitDef& def, int x, int y) const {
+    return phase_ == Phase::Deploy && inBounds(x, y) && inDeployZone(x, y) && !unitAt(x, y) &&
+           terrainAt(x, y).moveCost(def.cls) > 0 && def.cost <= budgetLeft();
+}
+
+bool Battle::deploy(const UnitDef& def, int x, int y) {
+    if (!canDeploy(def, x, y)) return false;
+    Unit u;
+    u.id = nextId_++;
+    u.def = &def;
+    u.side = Side::Player;
+    u.x = x;
+    u.y = y;
+    u.hp = def.hp;
+    u.will = def.will;
+    units_.push_back(u);
+    return true;
+}
+
+bool Battle::undeploy(int x, int y) {
+    if (phase_ != Phase::Deploy) return false;
+    for (auto it = units_.begin(); it != units_.end(); ++it)
+        if (it->alive && it->side == Side::Player && it->x == x && it->y == y) {
+            units_.erase(it);
+            return true;
+        }
+    return false;
+}
+
+bool Battle::startBattle() {
+    if (phase_ != Phase::Deploy || aliveCount(Side::Player) == 0) return false;
+    phase_ = Phase::PlayerTurn;
+    round_ = 1;
+    beginPhase(Side::Player);
+    message("Runde 1 - dein Zug");
+    return true;
+}
+
+// ---------------------------------------------------------------------------------
+// Turn flow
+// ---------------------------------------------------------------------------------
+void Battle::beginPhase(Side s) {
+    for (auto& u : units_) {
+        if (!u.alive || u.side != s) continue;
+        u.actionsLeft = u.maxActions();
+        u.moved = u.attacked = false;
+        for (auto& c : u.cooldown) if (c > 0) --c;
+    }
+}
+
+// Willpower is restored at the end of the owning side's phase: a unit that was
+// broken (will == 0) during the enemy's phase cannot move in its next phase and
+// recovers right after it.
+void Battle::endPhase(Side s) {
+    for (auto& u : units_) {
+        if (!u.alive || u.side != s) continue;
+        u.will = u.def->will;
+        u.actionsLeft = 0;
+    }
+}
+
+void Battle::finish(Phase p, const std::string& reason) {
+    phase_ = p;
+    endReason_ = reason;
+    message(reason);
+}
+
+void Battle::checkEnd() {
+    if (phase_ != Phase::PlayerTurn && phase_ != Phase::EnemyTurn) return;
+    if (aliveCount(Side::Enemy) == 0) return finish(Phase::Won, "Alle gegnerischen Truppen wurden vernichtet!");
+    if (aliveCount(Side::Player) == 0) return finish(Phase::Lost, "Alle deine Truppen wurden vernichtet!");
+    if (mission_.objective == Objective::Capture) {
+        bool all = true;
+        for (auto& b : buildings_) if (b.objective && b.owner != Side::Player) all = false;
+        if (all) finish(Phase::Won, "Alle Ziele wurden eingenommen!");
+    }
+}
+
+void Battle::endPlayerTurn() {
+    if (phase_ != Phase::PlayerTurn) return;
+    endPhase(Side::Player);
+    phase_ = Phase::EnemyTurn;
+    beginPhase(Side::Enemy);
+    aiQueue_.clear();
+    for (auto& u : units_) if (u.alive && u.side == Side::Enemy) aiQueue_.push_back(u.id);
+    message("Gegnerzug", Side::Enemy);
+}
+
+// ---------------------------------------------------------------------------------
+// Movement
+// ---------------------------------------------------------------------------------
+bool Battle::canMove(const Unit& u) const {
+    return u.alive && u.actionsLeft > 0 && !u.moved && !u.attacked && u.will > 0 &&
+           ((u.side == Side::Player && phase_ == Phase::PlayerTurn) ||
+            (u.side == Side::Enemy && phase_ == Phase::EnemyTurn));
+}
+
+std::vector<int> Battle::dijkstra(const Unit& u) const {
+    const int w = width(), n = w * height();
+    std::vector<int> dist(n, INT_MAX);
+    using Node = std::pair<int, int>;
+    std::priority_queue<Node, std::vector<Node>, std::greater<Node>> pq;
+    dist[u.y * w + u.x] = 0;
+    pq.push({0, u.y * w + u.x});
+    const int dx[4] = {1, -1, 0, 0}, dy[4] = {0, 0, 1, -1};
+    while (!pq.empty()) {
+        auto [d, idx] = pq.top();
+        pq.pop();
+        if (d > dist[idx]) continue;
+        int cx = idx % w, cy = idx / w;
+        for (int k = 0; k < 4; ++k) {
+            int nx = cx + dx[k], ny = cy + dy[k];
+            if (!inBounds(nx, ny)) continue;
+            int cost = terrainAt(nx, ny).moveCost(u.def->cls);
+            if (cost <= 0) continue;
+            const Unit* o = unitAt(nx, ny);
+            if (o && o->side != u.side) continue;   // enemies block, friends can be passed
+            int nd = d + cost;
+            if (nd > u.def->move) continue;
+            if (nd < dist[ny * w + nx]) {
+                dist[ny * w + nx] = nd;
+                pq.push({nd, ny * w + nx});
+            }
+        }
+    }
+    for (auto& d : dist) if (d == INT_MAX) d = -1;
+    return dist;
+}
+
+std::vector<int> Battle::reachable(const Unit& u) const {
+    std::vector<int> dist = dijkstra(u);
+    for (int y = 0; y < height(); ++y)
+        for (int x = 0; x < width(); ++x) {
+            int i = y * width() + x;
+            if ((x == u.x && y == u.y) || unitAt(x, y)) dist[i] = -1;
+        }
+    return dist;
+}
+
+bool Battle::moveUnit(Unit& u, int x, int y) {
+    if (!canMove(u) || !inBounds(x, y)) return false;
+    auto r = reachable(u);
+    if (r[y * width() + x] < 0) return false;
+    BattleEvent e;
+    e.kind = BattleEvent::Kind::Move;
+    e.ax = u.x; e.ay = u.y; e.bx = x; e.by = y;
+    e.side = u.side;
+    u.x = x;
+    u.y = y;
+    u.moved = true;
+    u.actionsLeft = 0;
+    emit(e);
+    tryCapture(u);
+    checkEnd();
+    return true;
+}
+
+void Battle::tryCapture(Unit& u) {
+    if (!u.def->isInfantry()) return;   // only infantry can take buildings
+    for (auto& b : buildings_) {
+        if (b.x == u.x && b.y == u.y && b.owner != u.side) {
+            b.owner = u.side;
+            BattleEvent e;
+            e.kind = BattleEvent::Kind::Capture;
+            e.ax = e.bx = b.x;
+            e.ay = e.by = b.y;
+            e.side = u.side;
+            e.text = b.name + (u.side == Side::Player ? " eingenommen!" : " vom Gegner eingenommen!");
+            emit(e);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------
+// Combat
+// ---------------------------------------------------------------------------------
+bool Battle::weaponReady(const Unit& u, int wi) const {
+    if (wi < 0 || wi >= static_cast<int>(u.def->weapons.size())) return false;
+    if (u.cooldown[wi] > 0) return false;
+    if (u.def->weapons[wi].needsRadio && !hasRadio(u.side)) return false;
+    return true;
+}
+
+bool Battle::canAttack(const Unit& a, int wi, const Unit& t) const {
+    if (!a.alive || !t.alive || a.side == t.side || a.actionsLeft <= 0) return false;
+    if (!((a.side == Side::Player && phase_ == Phase::PlayerTurn) ||
+          (a.side == Side::Enemy && phase_ == Phase::EnemyTurn)))
+        return false;
+    if (!weaponReady(a, wi) || !visibleTo(t, a.side)) return false;
+    int d = manhattan(a.x, a.y, t.x, t.y);
+    return d >= 1 && d <= a.def->weapons[wi].range;
+}
+
+int Battle::previewDamage(const Unit& a, int wi, const Unit& t) const {
+    return computeDamage(a.def->weapons[wi], t.def->armour, terrainAt(t.x, t.y).damageMult);
+}
+
+bool Battle::attack(Unit& a, int wi, Unit& t) {
+    if (!canAttack(a, wi, t)) return false;
+    const WeaponDef& w = a.def->weapons[wi];
+    int dmg = previewDamage(a, wi, t);
+    t.hp -= dmg;
+    int willBefore = t.will;
+    t.will = std::max(0, t.will - w.willDamage);
+    a.cooldown[wi] = w.cooldown > 0 ? w.cooldown + 1 : 0;
+    a.attacked = true;
+    --a.actionsLeft;
+
+    BattleEvent e;
+    e.kind = BattleEvent::Kind::Attack;
+    e.ax = a.x; e.ay = a.y; e.bx = t.x; e.by = t.y;
+    e.damage = dmg;
+    e.side = a.side;
+    e.text = a.def->name + " greift " + t.def->name + " an (" + w.name + "): -" + std::to_string(dmg) + " HP";
+    if (willBefore > 0 && t.will == 0 && t.hp > 0) e.text += " - Moral gebrochen!";
+    emit(e);
+
+    if (t.hp <= 0) {
+        t.hp = 0;
+        t.alive = false;
+        BattleEvent d;
+        d.kind = BattleEvent::Kind::Death;
+        d.ax = d.bx = t.x;
+        d.ay = d.by = t.y;
+        d.side = t.side;
+        d.text = t.def->name + " wurde vernichtet";
+        emit(d);
+    }
+    checkEnd();
+    return true;
+}
+
+// ---------------------------------------------------------------------------------
+// AI
+// ---------------------------------------------------------------------------------
+std::vector<int> Battle::distanceField(int gx, int gy, UnitClass c) const {
+    const int w = width(), n = w * height();
+    std::vector<int> dist(n, INT_MAX);
+    using Node = std::pair<int, int>;
+    std::priority_queue<Node, std::vector<Node>, std::greater<Node>> pq;
+    dist[gy * w + gx] = 0;
+    pq.push({0, gy * w + gx});
+    const int dx[4] = {1, -1, 0, 0}, dy[4] = {0, 0, 1, -1};
+    while (!pq.empty()) {
+        auto [d, idx] = pq.top();
+        pq.pop();
+        if (d > dist[idx]) continue;
+        int cx = idx % w, cy = idx / w;
+        // cost of stepping from the neighbour onto (cx,cy) = entry cost of (cx,cy)
+        int step = (idx == gy * w + gx) ? 1 : terrainAt(cx, cy).moveCost(c);
+        if (step <= 0) continue;
+        for (int k = 0; k < 4; ++k) {
+            int nx = cx + dx[k], ny = cy + dy[k];
+            if (!inBounds(nx, ny)) continue;
+            int nd = d + step;
+            if (nd < dist[ny * w + nx]) {
+                dist[ny * w + nx] = nd;
+                pq.push({nd, ny * w + nx});
+            }
+        }
+    }
+    return dist;
+}
+
+bool Battle::aiAttack(Unit& u) {
+    bool acted = false;
+    while (u.alive && u.actionsLeft > 0 && phase_ == Phase::EnemyTurn) {
+        int bestW = -1;
+        Unit* bestT = nullptr;
+        float bestScore = -1.f;
+        for (int wi = 0; wi < static_cast<int>(u.def->weapons.size()); ++wi) {
+            for (auto& t : units_) {
+                if (!canAttack(u, wi, t)) continue;
+                int dmg = previewDamage(u, wi, t);
+                float score = static_cast<float>(dmg) + (dmg >= t.hp ? 1000.f : 0.f) +
+                              static_cast<float>(t.def->will > 0 && t.will > 0 ? u.def->weapons[wi].willDamage : 0) +
+                              (200.f - static_cast<float>(t.hp)) * 0.05f;
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestW = wi;
+                    bestT = &t;
+                }
+            }
+        }
+        if (!bestT) break;
+        if (!attack(u, bestW, *bestT)) break;
+        acted = true;
+    }
+    return acted;
+}
+
+bool Battle::aiMove(Unit& u) {
+    if (u.holdPosition || !canMove(u)) return false;
+
+    // pick a goal: nearest player unit, or (infantry in capture missions) the nearest
+    // building not yet held by the enemy when no player unit is close
+    const Unit* nearest = nullptr;
+    int nearestD = INT_MAX;
+    for (auto& p : units_) {
+        if (!p.alive || p.side != Side::Player) continue;
+        int d = manhattan(u.x, u.y, p.x, p.y);
+        if (d < nearestD) { nearestD = d; nearest = &p; }
+    }
+    const Building* bld = nullptr;
+    int bldD = INT_MAX;
+    if (u.def->isInfantry() && mission_.objective == Objective::Capture) {
+        for (auto& b : buildings_) {
+            if (!b.objective || b.owner == Side::Enemy) continue;
+            int d = manhattan(u.x, u.y, b.x, b.y);
+            if (d < bldD) { bldD = d; bld = &b; }
+        }
+    }
+    int gx, gy;
+    if (bld && (!nearest || nearestD > 4)) { gx = bld->x; gy = bld->y; }
+    else if (nearest) { gx = nearest->x; gy = nearest->y; }
+    else return false;
+
+    auto field = distanceField(gx, gy, u.def->cls);
+    auto reach = reachable(u);
+    const int w = width();
+    int cur = field[u.y * w + u.x];
+    int bestIdx = -1, bestVal = cur;
+    float bestMult = 10.f;
+    for (int i = 0; i < w * height(); ++i) {
+        if (reach[i] < 0 || field[i] == INT_MAX) continue;
+        float mult = terrainAt(i % w, i / w).damageMult;
+        if (field[i] < bestVal || (field[i] == bestVal && bestIdx >= 0 && mult < bestMult)) {
+            bestVal = field[i];
+            bestIdx = i;
+            bestMult = mult;
+        }
+    }
+    if (bestIdx < 0) return false;
+    return moveUnit(u, bestIdx % w, bestIdx / w);
+}
+
+void Battle::stepAI() {
+    if (phase_ != Phase::EnemyTurn) return;
+    while (true) {
+        if (aiQueue_.empty()) {
+            endPhase(Side::Enemy);
+            ++round_;
+            if (mission_.maxTurns > 0 && round_ > mission_.maxTurns) {
+                finish(Phase::Lost, "Die Zeit ist abgelaufen!");
+                return;
+            }
+            phase_ = Phase::PlayerTurn;
+            beginPhase(Side::Player);
+            message("Runde " + std::to_string(round_) + " - dein Zug");
+            return;
+        }
+        int id = aiQueue_.front();
+        aiQueue_.pop_front();
+        Unit* u = unitById(id);
+        if (!u || !u->alive) continue;
+        bool acted = aiAttack(*u);
+        if (!acted && phase_ == Phase::EnemyTurn) acted = aiMove(*u);
+        if (phase_ != Phase::EnemyTurn) return;   // game ended during this action
+        if (acted) return;
+    }
+}

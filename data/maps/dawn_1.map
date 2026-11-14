@@ -1,0 +1,29 @@
+# Outpost Alpha - tiles: P plains, F forest, H hills, M mountain, R river
+[tiles]
+PPPPPPPPPPPP
+PPFPPPPPPFPP
+PFFPPPPPPFFP
+PPPPPHHPPPPP
+PPPPPPHPPPPP
+PFPPPPPPPPFP
+PPPPPPPPPPPP
+PPPPFPPFPPPP
+PPPPPPPPPPPP
+PPPPPPPPPPPP
+PPPPPPPPPPPP
+PPPPPPPPPPPP
+
+[deploy]
+2,9,9,11
+
+[buildings]
+# name,x,y,owner,objective
+Outpost,6,1,enemy,1
+
+[enemies]
+# unit_id,x,y,behavior (aggressive | hold)
+rifleman,5,2,hold
+rifleman,7,2,hold
+rifleman,6,3,hold
+rifleman,3,3,aggressive
+rifleman,9,3,aggressive
