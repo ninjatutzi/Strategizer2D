@@ -393,6 +393,43 @@ static void testAmmoEconomyBuildings(GameData& d) {
     }
 }
 
+static void testMapSizes(GameData& d) {
+    // maps may have any rectangular size; broken maps give a readable error
+    const std::string path = d.root() + "/data/maps/_size_test.map";
+    auto write = [&](const std::string& tiles) {
+        FILE* f = fopen(path.c_str(), "w");
+        fputs(tiles.c_str(), f);
+        fclose(f);
+    };
+    auto row = [](int w) { return std::string(static_cast<size_t>(w), 'P') + "\n"; };
+    Mission m = *d.mission("dawn_2");   // an 'eliminate' mission needs no buildings
+    m.mapFile = "_size_test.map";
+
+    std::string big = "[tiles]\n";
+    for (int y = 0; y < 16; ++y) big += row(20);
+    big += "[deploy]\n2,13,9,15\n[enemies]\nrifleman,15,2,aggressive\n";
+    write(big);
+    {
+        Battle b(d, m);
+        CHECK(b.width() == 20 && b.height() == 16);
+        CHECK(b.inBounds(19, 15) && !b.inBounds(20, 15) && !b.inBounds(19, 16));
+        CHECK(b.deploy(*d.unit("rifleman"), 5, 14));
+        CHECK(b.startBattle());
+        Unit* u = b.unitAt(5, 14);
+        auto r = b.reachable(*u);
+        CHECK(static_cast<int>(r.size()) == 20 * 16);
+    }
+    bool threw = false;
+    write("[tiles]\n" + row(10) + row(10) + row(9) + row(10) + row(10) + "[deploy]\n0,0,1,1\n");   // ragged row
+    try { Battle b(d, m); } catch (const std::exception& e) { threw = std::string(e.what()).find("same length") != std::string::npos; }
+    CHECK(threw);
+    threw = false;
+    write("[tiles]\n" + row(2) + row(2) + "[deploy]\n0,0,1,1\n");   // too small
+    try { Battle b(d, m); } catch (const std::exception& e) { threw = std::string(e.what()).find("not allowed") != std::string::npos; }
+    CHECK(threw);
+    std::remove(path.c_str());
+}
+
 // Random-ish games: random player, built-in AI. Must terminate without crashing.
 static void testSimulation(GameData& d) {
     std::mt19937 rng(1234);
@@ -468,6 +505,7 @@ int main(int argc, char** argv) {
         testFogAndTriggers(d);
         testSupportAndBuildings(d);
         testAmmoEconomyBuildings(d);
+        testMapSizes(d);
         testSimulation(d);
     } catch (const std::exception& e) {
         std::cerr << "EXCEPTION: " << e.what() << "\n";

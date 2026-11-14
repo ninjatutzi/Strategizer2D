@@ -8,9 +8,9 @@
 
 namespace {
 
-constexpr float kTile = 60.f;
+constexpr float kAreaSize = 720.f;   // the board is scaled to fit this square
 constexpr float kSideX = 10.f, kSideW = 170.f;
-constexpr float kBoardX = 190.f, kBoardY = 70.f;
+constexpr float kAreaX = 190.f, kAreaY = 70.f;
 constexpr float kPanelX = 930.f, kPanelY = 70.f, kPanelW = 410.f, kPanelH = 720.f;
 constexpr float kInnerX = kPanelX + 20.f, kInnerW = kPanelW - 40.f;
 constexpr int kDeployRows = 8;   // all units fit without scrolling (more units: mouse wheel)
@@ -81,6 +81,9 @@ std::string weaponShort(const WeaponDef& w) {
 } // namespace
 
 BattleScreen::BattleScreen(App& a, const Mission& m) : Screen(a), mission_(m), battle_(a.data, m) {
+    tile_ = std::floor(std::min(kAreaSize / battle_.width(), kAreaSize / battle_.height()));   // 12x12 -> 60 px, 16x16 -> 45 px
+    bx_ = kAreaX + std::floor((kAreaSize - tile_ * battle_.width()) / 2);
+    by_ = kAreaY + std::floor((kAreaSize - tile_ * battle_.height()) / 2);
     startBtn_ = {{kInnerX, 700, kInnerW, 44}, "Schlacht beginnen"};
     endBtn_ = {{kInnerX, 700, kInnerW, 44}, "Zug beenden (Leertaste)"};
     menuBtn_ = {{kInnerX, 750, kInnerW, 34}, "Mission verlassen"};
@@ -92,13 +95,13 @@ BattleScreen::BattleScreen(App& a, const Mission& m) : Screen(a), mission_(m), b
 // ---------------------------------------------------------------------------------
 // geometry
 // ---------------------------------------------------------------------------------
-sf::Vector2f BattleScreen::tileOrigin(int tx, int ty) const { return {kBoardX + tx * kTile, kBoardY + ty * kTile}; }
+sf::Vector2f BattleScreen::tileOrigin(int tx, int ty) const { return {bx_ + tx * tile_, by_ + ty * tile_}; }
 sf::Vector2f BattleScreen::tileCenter(int tx, int ty) const {
     auto o = tileOrigin(tx, ty);
-    return {o.x + kTile / 2, o.y + kTile / 2};
+    return {o.x + tile_ / 2, o.y + tile_ / 2};
 }
 bool BattleScreen::tileAt(sf::Vector2f p, int& tx, int& ty) const {
-    float fx = (p.x - kBoardX) / kTile, fy = (p.y - kBoardY) / kTile;
+    float fx = (p.x - bx_) / tile_, fy = (p.y - by_) / tile_;
     if (fx < 0 || fy < 0) return false;
     tx = static_cast<int>(fx);
     ty = static_cast<int>(fy);
@@ -435,7 +438,7 @@ void BattleScreen::drawTile(int tx, int ty) {
     sf::Vector2f o = tileOrigin(tx, ty);
     auto& w = app.window;
 
-    sf::RectangleShape bg({kTile, kTile});
+    sf::RectangleShape bg({tile_, tile_});
     bg.setPosition(o);
     bg.setFillColor(base);
     bg.setOutlineColor(sf::Color(0, 0, 0, 55));
@@ -443,18 +446,18 @@ void BattleScreen::drawTile(int tx, int ty) {
     w.draw(bg);
 
     auto circle = [&](float fx, float fy, float r, sf::Color c, float sy = 1.f) {
-        sf::CircleShape s(r * kTile);
-        s.setOrigin(r * kTile, r * kTile);
+        sf::CircleShape s(r * tile_);
+        s.setOrigin(r * tile_, r * tile_);
         s.setScale(1.f, sy);
-        s.setPosition(o.x + fx * kTile, o.y + fy * kTile);
+        s.setPosition(o.x + fx * tile_, o.y + fy * tile_);
         s.setFillColor(c);
         w.draw(s);
     };
     auto tri = [&](sf::Vector2f a, sf::Vector2f b, sf::Vector2f c, sf::Color fill) {
         sf::ConvexShape s(3);
-        s.setPoint(0, {o.x + a.x * kTile, o.y + a.y * kTile});
-        s.setPoint(1, {o.x + b.x * kTile, o.y + b.y * kTile});
-        s.setPoint(2, {o.x + c.x * kTile, o.y + c.y * kTile});
+        s.setPoint(0, {o.x + a.x * tile_, o.y + a.y * tile_});
+        s.setPoint(1, {o.x + b.x * tile_, o.y + b.y * tile_});
+        s.setPoint(2, {o.x + c.x * tile_, o.y + c.y * tile_});
         s.setFillColor(fill);
         w.draw(s);
     };
@@ -475,8 +478,8 @@ void BattleScreen::drawTile(int tx, int ty) {
         for (int i = 0; i < 3; ++i) {
             float fy = 0.25f + i * 0.25f;
             float off = (i % 2) * 0.15f;
-            sf::RectangleShape l({kTile * 0.5f, 3.f});
-            l.setPosition(o.x + (0.1f + off) * kTile, o.y + fy * kTile);
+            sf::RectangleShape l({tile_ * 0.5f, 3.f});
+            l.setPosition(o.x + (0.1f + off) * tile_, o.y + fy * tile_);
             l.setFillColor(shade(base, 1.35f));
             w.draw(l);
         }
@@ -489,17 +492,17 @@ void BattleScreen::drawBuilding(const Building& b) {
     if (b.destroyed) {   // rubble
         const float rub[5][3] = {{0.28f, 0.62f, 0.13f}, {0.48f, 0.52f, 0.16f}, {0.68f, 0.64f, 0.12f}, {0.40f, 0.74f, 0.10f}, {0.58f, 0.76f, 0.09f}};
         for (auto& r : rub) {
-            sf::CircleShape c(r[2] * kTile, 6);
-            c.setOrigin(r[2] * kTile, r[2] * kTile);
-            c.setPosition(o.x + r[0] * kTile, o.y + r[1] * kTile);
+            sf::CircleShape c(r[2] * tile_, 6);
+            c.setOrigin(r[2] * tile_, r[2] * tile_);
+            c.setPosition(o.x + r[0] * tile_, o.y + r[1] * tile_);
             c.setFillColor(sf::Color(70, 64, 60));
             c.setOutlineColor(sf::Color(30, 28, 26));
             c.setOutlineThickness(1.f);
             w.draw(c);
         }
-        sf::RectangleShape beam({kTile * 0.4f, 4.f});
-        beam.setOrigin(kTile * 0.2f, 2.f);
-        beam.setPosition(o.x + kTile * 0.5f, o.y + kTile * 0.4f);
+        sf::RectangleShape beam({tile_ * 0.4f, 4.f});
+        beam.setOrigin(tile_ * 0.2f, 2.f);
+        beam.setPosition(o.x + tile_ * 0.5f, o.y + tile_ * 0.4f);
         beam.setRotation(-25.f);
         beam.setFillColor(sf::Color(110, 84, 56));
         w.draw(beam);
@@ -507,59 +510,59 @@ void BattleScreen::drawBuilding(const Building& b) {
     }
     const std::string& type = b.def->id;
     if (type == "supplypost") {          // white depot with a green cross
-        sf::RectangleShape box({kTile * 0.56f, kTile * 0.4f});
-        box.setPosition(o.x + kTile * 0.3f, o.y + kTile * 0.42f);
+        sf::RectangleShape box({tile_ * 0.56f, tile_ * 0.4f});
+        box.setPosition(o.x + tile_ * 0.3f, o.y + tile_ * 0.42f);
         box.setFillColor(sf::Color(225, 232, 225));
         box.setOutlineColor(sf::Color(40, 60, 45));
         box.setOutlineThickness(1.f);
         w.draw(box);
-        sf::RectangleShape h({kTile * 0.22f, kTile * 0.07f}), v({kTile * 0.07f, kTile * 0.22f});
-        sf::Vector2f c(o.x + kTile * 0.58f, o.y + kTile * 0.62f);
+        sf::RectangleShape h({tile_ * 0.22f, tile_ * 0.07f}), v({tile_ * 0.07f, tile_ * 0.22f});
+        sf::Vector2f c(o.x + tile_ * 0.58f, o.y + tile_ * 0.62f);
         h.setOrigin(h.getSize().x / 2, h.getSize().y / 2); v.setOrigin(v.getSize().x / 2, v.getSize().y / 2);
         h.setPosition(c); v.setPosition(c);
         h.setFillColor(sf::Color(40, 170, 80)); v.setFillColor(sf::Color(40, 170, 80));
         w.draw(h); w.draw(v);
     } else if (type == "bunker") {       // low grey block with a slit
-        sf::RectangleShape blk({kTile * 0.64f, kTile * 0.4f});
-        blk.setPosition(o.x + kTile * 0.26f, o.y + kTile * 0.4f);
+        sf::RectangleShape blk({tile_ * 0.64f, tile_ * 0.4f});
+        blk.setPosition(o.x + tile_ * 0.26f, o.y + tile_ * 0.4f);
         blk.setFillColor(sf::Color(100, 102, 108));
         blk.setOutlineColor(sf::Color(30, 30, 34));
         blk.setOutlineThickness(1.5f);
         w.draw(blk);
-        sf::RectangleShape slit({kTile * 0.36f, kTile * 0.06f});
-        slit.setPosition(o.x + kTile * 0.4f, o.y + kTile * 0.52f);
+        sf::RectangleShape slit({tile_ * 0.36f, tile_ * 0.06f});
+        slit.setPosition(o.x + tile_ * 0.4f, o.y + tile_ * 0.52f);
         slit.setFillColor(sf::Color(15, 15, 18));
         w.draw(slit);
     } else {                             // outpost: small house
-        sf::RectangleShape body({kTile * 0.44f, kTile * 0.34f});
-        body.setPosition(o.x + kTile * 0.34f, o.y + kTile * 0.5f);
+        sf::RectangleShape body({tile_ * 0.44f, tile_ * 0.34f});
+        body.setPosition(o.x + tile_ * 0.34f, o.y + tile_ * 0.5f);
         body.setFillColor(sf::Color(120, 100, 80));
         body.setOutlineColor(sf::Color(40, 30, 20));
         body.setOutlineThickness(1.f);
         w.draw(body);
         sf::ConvexShape roof(3);
-        roof.setPoint(0, {o.x + kTile * 0.28f, o.y + kTile * 0.5f});
-        roof.setPoint(1, {o.x + kTile * 0.56f, o.y + kTile * 0.26f});
-        roof.setPoint(2, {o.x + kTile * 0.84f, o.y + kTile * 0.5f});
+        roof.setPoint(0, {o.x + tile_ * 0.28f, o.y + tile_ * 0.5f});
+        roof.setPoint(1, {o.x + tile_ * 0.56f, o.y + tile_ * 0.26f});
+        roof.setPoint(2, {o.x + tile_ * 0.84f, o.y + tile_ * 0.5f});
         roof.setFillColor(sf::Color(160, 66, 52));
         w.draw(roof);
     }
     // flag at the top-left corner so a unit standing on the building does not hide it
-    sf::RectangleShape pole({2.f, kTile * 0.4f});
-    pole.setPosition(o.x + kTile * 0.08f, o.y + kTile * 0.06f);
+    sf::RectangleShape pole({2.f, tile_ * 0.4f});
+    pole.setPosition(o.x + tile_ * 0.08f, o.y + tile_ * 0.06f);
     pole.setFillColor(sf::Color(40, 40, 40));
     w.draw(pole);
-    sf::RectangleShape flag({kTile * 0.2f, kTile * 0.13f});
-    flag.setPosition(o.x + kTile * 0.08f + 2.f, o.y + kTile * 0.06f);
+    sf::RectangleShape flag({tile_ * 0.2f, tile_ * 0.13f});
+    flag.setPosition(o.x + tile_ * 0.08f + 2.f, o.y + tile_ * 0.06f);
     flag.setFillColor(sideColor(b.owner));
     flag.setOutlineColor(sf::Color(20, 20, 20));
     flag.setOutlineThickness(1.f);
     w.draw(flag);
-    if (b.objective) app.text("\xE2\x98\x85", o.x + kTile * 0.4f, o.y + 1, 13, col::Accent);   // star = objective
-    if (b.protect) app.text("\xE2\x9B\xA8", o.x + kTile * 0.4f, o.y + 1, 13, col::Player);     // shield = must be protected
+    if (b.objective) app.text("\xE2\x98\x85", o.x + tile_ * 0.4f, o.y + 1, 13, col::Accent);   // star = objective
+    if (b.protect) app.text("\xE2\x9B\xA8", o.x + tile_ * 0.4f, o.y + 1, 13, col::Player);     // shield = must be protected
     if (b.hp < b.maxHp) {   // damaged: show a health bar
         float f = static_cast<float>(b.hp) / b.maxHp;
-        drawBar(o.x + 5, o.y + kTile - 8, kTile - 10, 5, f, hpColor(f));
+        drawBar(o.x + 5, o.y + tile_ - 8, tile_ - 10, 5, f, hpColor(f));
     }
 }
 
@@ -637,10 +640,10 @@ void BattleScreen::drawUnits() {
         sf::Vector2f c = tileCenter(u.x, u.y);
         sf::Vector2f o = tileOrigin(u.x, u.y);
         bool exhausted = ph == Phase::PlayerTurn && u.side == Side::Player && u.attacksLeft == 0 && !battle_.canMove(u);
-        app.drawUnitIcon(*u.def, {c.x, c.y - 2}, kTile * 0.74f, sideColor(u.side), exhausted ? 0.5f : 1.f);
-        drawBar(o.x + 5, o.y + kTile - 8, kTile - 10, 5, static_cast<float>(u.hp) / u.def->hp, hpColor(static_cast<float>(u.hp) / u.def->hp));
+        app.drawUnitIcon(*u.def, {c.x, c.y - 2}, tile_ * 0.74f, sideColor(u.side), exhausted ? 0.5f : 1.f);
+        drawBar(o.x + 5, o.y + tile_ - 8, tile_ - 10, 5, static_cast<float>(u.hp) / u.def->hp, hpColor(static_cast<float>(u.hp) / u.def->hp));
         // small status icons in the top-right corner of the tile (right to left)
-        float bx = o.x + kTile - 8, by = o.y + 8;
+        float bx = o.x + tile_ - 8, by = o.y + 8;
         auto badge = [&](char l, sf::Color c, bool plus = false) { drawBadge(bx, by, l, c, plus); bx -= 14; };
         if (u.will <= 0 && ph != Phase::Deploy) badge('!', sf::Color(210, 50, 40));                 // morale broken
         if (u.def->fuel > 0 && u.fuel <= 2) badge('F', u.fuel == 0 ? sf::Color(210, 50, 40) : sf::Color(215, 140, 30));   // low fuel
@@ -652,7 +655,7 @@ void BattleScreen::drawUnits() {
         if (u.def->has("double_attack")) badge('2', sf::Color(190, 110, 30));
         // bottom-right: what this unit can still do this turn (icons disappear once the action is used up)
         if (ph == Phase::PlayerTurn && u.side == Side::Player) {
-            float sx = o.x + kTile - 9, sy = o.y + kTile - 19;
+            float sx = o.x + tile_ - 9, sy = o.y + tile_ - 19;
             auto status = [&](int kind, sf::Color c) { drawStatusBadge(sx, sy, kind, c); sx -= 16; };
             if (battle_.canMove(u)) status(0, sf::Color(50, 110, 220));
             else if (!u.moved && u.def->fuel > 0 && u.fuel == 0) status(4, sf::Color(200, 45, 40));   // wants to move but has no fuel
@@ -670,7 +673,7 @@ void BattleScreen::drawUnits() {
             }
         }
         if (u.id == selectedId_) {
-            app.rect({o.x, o.y, kTile, kTile}, sf::Color::Transparent, col::Accent, 3.f);
+            app.rect({o.x, o.y, tile_, tile_}, sf::Color::Transparent, col::Accent, 3.f);
         }
     }
 }
@@ -720,7 +723,7 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
                 if (battle_.inDeployZone(x, y)) {
                     auto o = tileOrigin(x, y);
                     bool ok = deployDef_ && battle_.canDeploy(*deployDef_, x, y);
-                    app.rect({o.x, o.y, kTile, kTile}, withAlpha(col::Player, ok ? 95 : 55), withAlpha(col::Player, 160), 1.f);
+                    app.rect({o.x, o.y, tile_, tile_}, withAlpha(col::Player, ok ? 95 : 55), withAlpha(col::Player, 160), 1.f);
                 }
     }
     for (auto& b : battle_.buildings()) drawBuilding(b);
@@ -731,7 +734,7 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
             for (int x = 0; x < W; ++x)
                 if (!battle_.tileVisible(x, y, Side::Player)) {
                     auto o = tileOrigin(x, y);
-                    app.rect({o.x, o.y, kTile, kTile}, sf::Color(135, 135, 140, 120));
+                    app.rect({o.x, o.y, tile_, tile_}, sf::Color(135, 135, 140, 120));
                 }
     }
 
@@ -746,16 +749,16 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
                 for (int x = 0; x < W; ++x)
                     if (reach_[y * W + x] >= 0) {
                         auto o = tileOrigin(x, y);
-                        app.rect({o.x, o.y, kTile, kTile}, withAlpha(own ? col::Player : col::Enemy, own ? 100 : 60),
+                        app.rect({o.x, o.y, tile_, tile_}, withAlpha(own ? col::Player : col::Enemy, own ? 100 : 60),
                                  withAlpha(own ? col::Player : col::Enemy, 200), 1.f);
                     }
         if (own && !weaponMode && ph == Phase::PlayerTurn)   // infantry next to a building it can take
             for (auto& b : battle_.buildings())
                 if (battle_.canCapture(*sel, b)) {
                     auto o = tileOrigin(b.x, b.y);
-                    app.rect({o.x, o.y, kTile, kTile}, withAlpha(col::Accent, 70), col::Accent, 3.f);
+                    app.rect({o.x, o.y, tile_, tile_}, withAlpha(col::Accent, 70), col::Accent, 3.f);
                     float tw = app.textWidth("Einnehmen", 11, true);
-                    app.text("Einnehmen", o.x + (kTile - tw) / 2, o.y + kTile - 15, 11, col::Accent, true);
+                    app.text("Einnehmen", o.x + (tile_ - tw) / 2, o.y + tile_ - 15, 11, col::Accent, true);
                 }
         if (weaponMode && ph == Phase::PlayerTurn) {
             const WeaponDef& wp = sel->def->weapons[selectedWeapon_];
@@ -767,23 +770,23 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
                     int d = std::abs(x - sel->x) + std::abs(y - sel->y);
                     if (d < 1 || d > wp.range) continue;
                     auto o = tileOrigin(x, y);
-                    app.rect({o.x, o.y, kTile, kTile}, withAlpha(rangeC, 55), withAlpha(rangeC, 170), 1.f);
+                    app.rect({o.x, o.y, tile_, tile_}, withAlpha(rangeC, 55), withAlpha(rangeC, 170), 1.f);
                 }
             for (auto& u : battle_.units())
                 if (u.present() && battle_.canAttack(*sel, selectedWeapon_, u)) {
                     auto o = tileOrigin(u.x, u.y);
-                    app.rect({o.x, o.y, kTile, kTile}, withAlpha(targetC, 90), targetC, 3.f);
+                    app.rect({o.x, o.y, tile_, tile_}, withAlpha(targetC, 90), targetC, 3.f);
                 }
             for (auto& b : battle_.buildings())
                 if (battle_.canAttackBuilding(*sel, selectedWeapon_, b)) {
                     auto o = tileOrigin(b.x, b.y);
-                    app.rect({o.x, o.y, kTile, kTile}, withAlpha(targetC, 60), targetC, 3.f);
+                    app.rect({o.x, o.y, tile_, tile_}, withAlpha(targetC, 60), targetC, 3.f);
                 }
         }
     }
     if (selB) {   // selected building: outline, and the range of its weapon when one is chosen
         auto bo = tileOrigin(selB->x, selB->y);
-        app.rect({bo.x, bo.y, kTile, kTile}, sf::Color::Transparent, col::Accent, 3.f);
+        app.rect({bo.x, bo.y, tile_, tile_}, sf::Color::Transparent, col::Accent, 3.f);
         if (selB->owner == Side::Player && selectedWeapon_ >= 0 && ph == Phase::PlayerTurn &&
             selectedWeapon_ < static_cast<int>(selB->def->weapons.size())) {
             const WeaponDef& wp = selB->def->weapons[selectedWeapon_];
@@ -792,12 +795,12 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
                     int d = std::abs(x - selB->x) + std::abs(y - selB->y);
                     if (d < 1 || d > wp.range) continue;
                     auto o = tileOrigin(x, y);
-                    app.rect({o.x, o.y, kTile, kTile}, withAlpha(kSupportGreen, 55), withAlpha(kSupportGreen, 170), 1.f);
+                    app.rect({o.x, o.y, tile_, tile_}, withAlpha(kSupportGreen, 55), withAlpha(kSupportGreen, 170), 1.f);
                 }
             for (auto& u : battle_.units())
                 if (u.present() && battle_.canBuildingSupport(*selB, selectedWeapon_, u)) {
                     auto o = tileOrigin(u.x, u.y);
-                    app.rect({o.x, o.y, kTile, kTile}, withAlpha(kSupportGreen, 90), kSupportGreen, 3.f);
+                    app.rect({o.x, o.y, tile_, tile_}, withAlpha(kSupportGreen, 90), kSupportGreen, 3.f);
                 }
         }
     }
@@ -806,7 +809,7 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
 
     if (hx_ >= 0) {
         auto o = tileOrigin(hx_, hy_);
-        app.rect({o.x, o.y, kTile, kTile}, sf::Color::Transparent, sf::Color(255, 255, 255, 200), 2.f);
+        app.rect({o.x, o.y, tile_, tile_}, sf::Color::Transparent, sf::Color(255, 255, 255, 200), 2.f);
     }
     drawEffects();
 
@@ -817,8 +820,8 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
             std::string s = "Klick: " + hb->name + " einnehmen (verbraucht die Bewegung)";
             float w = app.textWidth(s, 14) + 16;
             auto c = tileCenter(hx_, hy_);
-            float x = std::clamp(c.x - w / 2, kBoardX, kBoardX + W * kTile - w);
-            float y = std::max(kBoardY + 2.f, c.y - kTile / 2 - 30);
+            float x = std::clamp(c.x - w / 2, bx_, bx_ + W * tile_ - w);
+            float y = std::max(by_ + 2.f, c.y - tile_ / 2 - 30);
             app.rect({x, y, w, 24}, sf::Color(15, 15, 20, 235), col::Accent, 1.f);
             app.text(s, x + 8, y + 3, 14, col::Text);
         }
@@ -831,8 +834,8 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
             std::string s = v > 0 ? "Heilung +" + std::to_string(v) + "  (HP " + std::to_string(t->hp) + " > " + std::to_string(t->hp + v) + ")" : "Versorgt";
             float w = app.textWidth(s, 15) + 16;
             auto c = tileCenter(hx_, hy_);
-            float x = std::clamp(c.x - w / 2, kBoardX, kBoardX + W * kTile - w);
-            float y = std::max(kBoardY + 2.f, c.y - kTile / 2 - 30);
+            float x = std::clamp(c.x - w / 2, bx_, bx_ + W * tile_ - w);
+            float y = std::max(by_ + 2.f, c.y - tile_ / 2 - 30);
             app.rect({x, y, w, 24}, sf::Color(15, 15, 20, 235), kSupportGreen, 1.f);
             app.text(s, x + 8, y + 2, 15, col::Text);
         }
@@ -859,8 +862,8 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
         if (!s.empty()) {
             float w = app.textWidth(s, 15) + 16;
             auto c = tileCenter(hx_, hy_);
-            float x = std::clamp(c.x - w / 2, kBoardX, kBoardX + W * kTile - w);
-            float y = std::max(kBoardY + 2.f, c.y - kTile / 2 - 30);
+            float x = std::clamp(c.x - w / 2, bx_, bx_ + W * tile_ - w);
+            float y = std::max(by_ + 2.f, c.y - tile_ / 2 - 30);
             app.rect({x, y, w, 24}, sf::Color(15, 15, 20, 235), col::Accent, 1.f);
             app.text(s, x + 8, y + 2, 15, col::Text);
         }
@@ -868,14 +871,14 @@ void BattleScreen::drawBoard(sf::Vector2f mouse) {
 }
 
 void BattleScreen::drawTopBar() {
-    app.text(mission_.name, kBoardX, 8, 24, col::Text, true);
+    app.text(mission_.name, kAreaX, 8, 24, col::Text, true);
     std::string obj;
     switch (mission_.objective) {
     case Objective::Capture: obj = "Ziel: \xE2\x98\x85-Gebäude einnehmen (Infanterie daneben, anklicken) oder zerstören - oder alle Gegner vernichten"; break;
     case Objective::Eliminate: obj = "Ziel: Alle gegnerischen Truppen vernichten"; break;
     case Objective::Survive: obj = "Ziel: " + std::to_string(mission_.maxTurns) + " Runden durchhalten - verliere deinen Außenposten nicht!"; break;
     }
-    app.text(obj, kBoardX, 40, 14, col::TextDim);
+    app.text(obj, kAreaX, 40, 14, col::TextDim);
 
     std::string phase;
     sf::Color pc = col::Text;
@@ -893,7 +896,7 @@ void BattleScreen::drawTopBar() {
 void BattleScreen::drawSidebar(sf::Vector2f) {
     const bool deploy = battle_.phase() == Phase::Deploy;
     // ---- round ----
-    sf::FloatRect r1{kSideX, kBoardY, kSideW, 84};
+    sf::FloatRect r1{kSideX, kAreaY, kSideW, 84};
     app.rect(r1, col::Panel, sf::Color(80, 88, 105), 1.f);
     app.text("RUNDE", r1.left + 12, r1.top + 8, 12, col::TextDim, true);
     std::string rn = deploy ? "-" : std::to_string(battle_.round());

@@ -88,8 +88,10 @@ void MissionScreen::event(const sf::Event& e, sf::Vector2f mouse) {
             if (cardRect(i).contains(mouse)) {
                 try {
                     app.goTo(std::make_unique<BattleScreen>(app, *missions_[i]));
+                    error_.clear();
                 } catch (const std::exception& ex) {
                     std::cerr << "cannot start mission: " << ex.what() << "\n";
+                    error_ = std::string("Mission '") + missions_[i]->name + "' kann nicht gestartet werden: " + ex.what();
                 }
                 return;
             }
@@ -112,6 +114,12 @@ void MissionScreen::draw(sf::Vector2f mouse) {
                      (m.maxTurns > 0 ? "   |   Max. Runden: " + std::to_string(m.maxTurns) : ""),
                  r.left + 20, r.top + 44, 15, col::Accent);
         app.paragraph(m.description, r.left + 20, r.top + 66, 860, 14);
+    }
+    if (!error_.empty()) {   // e.g. a broken map file: show the reason instead of silently doing nothing
+        const float x = (kScreenW - 900) / 2, w = 900;
+        int lines = static_cast<int>(app.wrap(error_, 14, w - 32).size());
+        app.rect({x, 590, w, 20.f + lines * 19.f}, sf::Color(90, 20, 20, 160), col::Enemy, 1.f);
+        app.paragraph(error_, x + 16, 598, w - 32, 14, sf::Color(255, 190, 170), 19.f);
     }
     app.button(back_, mouse);
 }

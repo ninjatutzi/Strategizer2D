@@ -33,6 +33,33 @@ void Battle::loadMap(const std::string& path) {
         throw std::runtime_error(path + ":" + std::to_string(line) + ": " + msg);
     };
 
+    // pass 1: the size of the map is given by the [tiles] rows
+    {
+        std::string sec, r;
+        int n = 0, firstLen = -1, count = 0;
+        while (std::getline(in, r)) {
+            ++n;
+            if (!r.empty() && r.back() == '\r') r.pop_back();
+            std::string l = trim(r);
+            if (l.empty() || l[0] == '#') continue;
+            if (l[0] == '[') { sec = toLower(l); continue; }
+            if (sec != "[tiles]") continue;
+            if (firstLen < 0) firstLen = static_cast<int>(l.size());
+            else if (static_cast<int>(l.size()) != firstLen)
+                fail(n, "tile rows must all have the same length (first row has " + std::to_string(firstLen) +
+                            " characters, this one has " + std::to_string(l.size()) + ")");
+            ++count;
+        }
+        if (count < cfg::MinMapSize || firstLen < cfg::MinMapSize || count > cfg::MaxMapSize || firstLen > cfg::MaxMapSize)
+            throw std::runtime_error(path + ": map size " + std::to_string(std::max(firstLen, 0)) + "x" + std::to_string(count) +
+                                     " is not allowed (width and height must be " + std::to_string(cfg::MinMapSize) + " to " +
+                                     std::to_string(cfg::MaxMapSize) + ")");
+        width_ = firstLen;
+        height_ = count;
+        in.clear();
+        in.seekg(0);
+    }
+
     std::string section, raw;
     int lineNo = 0;
     std::vector<std::string> rows;
@@ -47,8 +74,6 @@ void Battle::loadMap(const std::string& path) {
             continue;
         }
         if (section == "[tiles]") {
-            if (static_cast<int>(line.size()) != cfg::MapSize)
-                fail(lineNo, "tile row must have exactly " + std::to_string(cfg::MapSize) + " characters");
             rows.push_back(line);
         } else if (section == "[deploy]") {
             auto p = split(line, ',');
@@ -119,16 +144,14 @@ void Battle::loadMap(const std::string& path) {
     }
     nextId_ = nextUnitId;
 
-    if (static_cast<int>(rows.size()) != cfg::MapSize)
-        throw std::runtime_error(path + ": map needs exactly " + std::to_string(cfg::MapSize) + " tile rows, found " +
-                                 std::to_string(rows.size()));
-    tiles_.resize(cfg::MapSize * cfg::MapSize);
-    for (int y = 0; y < cfg::MapSize; ++y)
-        for (int x = 0; x < cfg::MapSize; ++x) {
+    tiles_.resize(static_cast<size_t>(width_) * height_);
+    for (int y = 0; y < height_; ++y)
+        for (int x = 0; x < width_; ++x) {
             const Terrain* t = data_.terrainBySymbol(rows[y][x]);
             if (!t) throw std::runtime_error(path + ": unknown terrain symbol '" + std::string(1, rows[y][x]) +
-                                             "' at x=" + std::to_string(x) + " y=" + std::to_string(y));
-            tiles_[y * width() + x] = t;
+                                             "' at x=" + std::to_string(x) + " y=" + std::to_string(y) +
+                                             " (add it to data/terrain.csv)");
+            tiles_[y * width_ + x] = t;
         }
 
     // validation
