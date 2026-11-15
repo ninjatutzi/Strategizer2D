@@ -123,13 +123,13 @@ Eine **neue Mission** = Zeile in `missions.csv` + neue `.map`-Datei.
 ```
 [tiles]        Zeilen mit je einem Zeichen pro Feld (alle Zeilen gleich lang), z. B. P Plains, F Forest, H Hills,
                M Mountain, R River – die Symbole stammen aus terrain.csv, jede Karte nutzt nur die, die sie braucht
-[deploy]       Aufstellungszone als Rechteck: x0,y0,x1,y1  (mehrere Zeilen möglich)
+[deploy]       Aufstellungszone als Rechteck: x0,y0,x1,y1 = Ecke oben links und Ecke unten rechts (mehrere Zeilen möglich)
 [buildings]    Typ,x,y,Besitzer(enemy|player|neutral),Rolle(capture|protect|none)[,HP[,Rüstung[,Name]]]   Typ aus buildings.csv
 [triggers]     Gruppe,x0,y0,x1,y1   Auslöser-Rechteck (mehrere Zeilen pro Gruppe möglich)
 [enemies]      unit_id,x,y,Verhalten(aggressive|hold)[,Gruppe]   hold = bewegt sich nie, schießt nur;
                mit Gruppe: erscheint erst, wenn die Gruppe ausgelöst wird
 ```
-Koordinaten: x = Spalte, y = Zeile, jeweils ab 0 (oben links).
+Koordinaten: x = Spalte von links, y = Zeile von oben, jeweils ab 0 – (0,0) ist das Feld oben links, bei 12×12 ist (11,11) unten rechts.
 
 ## Bilder
 

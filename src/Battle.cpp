@@ -80,9 +80,12 @@ void Battle::loadMap(const std::string& path) {
             if (p.size() != 4) fail(lineNo, "deploy line must be x0,y0,x1,y1");
             int v[4];
             for (int i = 0; i < 4; ++i) v[i] = std::atoi(trim(p[i]).c_str());
+            // the two corners may be given in any order (e.g. 5,2,6,1 is the same as 5,1,6,2)
+            if (v[0] > v[2]) std::swap(v[0], v[2]);
+            if (v[1] > v[3]) std::swap(v[1], v[3]);
             for (int y = v[1]; y <= v[3]; ++y)
                 for (int x = v[0]; x <= v[2]; ++x) {
-                    if (!inBounds(x, y)) fail(lineNo, "deploy zone outside the map");
+                    if (!inBounds(x, y)) fail(lineNo, "deploy zone outside the map (x 0-" + std::to_string(width_ - 1) + ", y 0-" + std::to_string(height_ - 1) + ")");
                     deployZone_.emplace_back(x, y);
                 }
         } else if (section == "[buildings]") {
@@ -155,7 +158,7 @@ void Battle::loadMap(const std::string& path) {
         }
 
     // validation
-    if (deployZone_.empty()) throw std::runtime_error(path + ": [deploy] zone is empty");
+    if (deployZone_.empty()) throw std::runtime_error(path + ": [deploy] zone is empty (write: x0,y0,x1,y1 = top-left and bottom-right corner)");
     for (auto& u : units_) {
         if (!u.group.empty() &&
             std::none_of(triggers_.begin(), triggers_.end(), [&](const Trigger& t) { return t.group == u.group; }))

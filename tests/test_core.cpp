@@ -419,6 +419,12 @@ static void testMapSizes(GameData& d) {
         auto r = b.reachable(*u);
         CHECK(static_cast<int>(r.size()) == 20 * 16);
     }
+    // deploy corners in the "wrong" order still work (5,2,6,1 == 5,1,6,2)
+    write("[tiles]\n" + row(12) + row(12) + row(12) + row(12) + row(12) + "[deploy]\n5,2,6,1\n[enemies]\nrifleman,1,4,hold\n");
+    {
+        Battle b(d, m);
+        CHECK(b.inDeployZone(5, 1) && b.inDeployZone(6, 2) && b.inDeployZone(5, 2) && !b.inDeployZone(5, 3));
+    }
     bool threw = false;
     write("[tiles]\n" + row(10) + row(10) + row(9) + row(10) + row(10) + "[deploy]\n0,0,1,1\n");   // ragged row
     try { Battle b(d, m); } catch (const std::exception& e) { threw = std::string(e.what()).find("same length") != std::string::npos; }
